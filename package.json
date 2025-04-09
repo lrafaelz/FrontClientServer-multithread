@@ -1,0 +1,46 @@
+{
+  "main": "dist-electron/main.js",
+  "name": "client-server_multithread",
+  "private": true,
+  "version": "0.0.0",
+  "type": "commonjs",
+  "build": {
+    "appId": "com.seuprojeto.app",
+    "productName": "capivaraCoorp",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "node_modules/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "scripts": {
+    "dev": "vite",
+    "build-electron": "tsc -p tsconfig.electron.json",
+    "electron": "npm run build-electron && electron .",
+    "start": "concurrently \"npm run dev\" \"npm run electron\"",
+    "build": "vite build && tsc -p tsconfig.electron.json",
+    "preview": "vite preview",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^35.1.4",
+    "electron-builder": "^26.0.12",
+    "typescript": "~5.7.2",
+    "vite": "^6.2.0"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/material": "^7.0.1"
+  }
+}
