@@ -1,32 +1,48 @@
-import { useState } from 'react';
-import { 
-  Container, 
-  TextField, 
-  Button, 
-  Typography, 
-  Box, 
+import { useState } from "react";
+import {
+  Container,
+  TextField,
+  Button,
+  Typography,
+  Box,
   Grid,
   RadioGroup,
   FormControlLabel,
   Radio,
   FormControl,
   FormLabel,
-  Alert
-} from '@mui/material';
-import { TCPClient, QueryResult } from './services/TCPClient';
+  Alert,
+} from "@mui/material";
+import { PatternFormat } from "react-number-format";
+import { TCPClient, QueryResult } from "./services/TCPClient";
 
 function App() {
-  const [host, setHost] = useState('localhost');
-  const [port, setPort] = useState('5000');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [queryType, setQueryType] = useState<'name' | 'exactName' | 'cpf'>('name');
+  const [host, setHost] = useState("localhost");
+  const [port, setPort] = useState("5000");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [queryType, setQueryType] = useState<"name" | "exactName" | "cpf">(
+    "name"
+  );
   const [results, setResults] = useState<QueryResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter") {
+      handleQuery();
+    }
+  };
+
+  const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Remove mask characters if it's a CPF input
+    const cleanValue = queryType === "cpf" ? value.replace(/\D/g, "") : value;
+    setSearchTerm(cleanValue);
+  };
+
   const handleQuery = async () => {
     if (!searchTerm) {
-      setError('Por favor, insira um termo de busca');
+      setError("Por favor, insira um termo de busca");
       return;
     }
 
@@ -36,11 +52,11 @@ function App() {
 
     try {
       const client = new TCPClient(host, parseInt(port));
-      
+
       let response;
-      if (queryType === 'name') {
+      if (queryType === "name") {
         response = await client.getPersonByName(searchTerm);
-      } else if (queryType === 'exactName') {
+      } else if (queryType === "exactName") {
         response = await client.getPersonByExactName(searchTerm);
       } else {
         response = await client.getPersonByCPF(searchTerm);
@@ -51,7 +67,7 @@ function App() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Erro desconhecido ao realizar a busca');
+        setError("Erro desconhecido ao realizar a busca");
       }
     } finally {
       setLoading(false);
@@ -66,7 +82,7 @@ function App() {
         </Typography>
 
         <Grid container spacing={3}>
-          <Box sx={{ width: '100%', display: 'flex', gap: 3 }}>
+          <Box sx={{ width: "100%", display: "flex", gap: 3 }}>
             <Box sx={{ flex: 1 }}>
               <TextField
                 fullWidth
@@ -85,32 +101,60 @@ function App() {
             </Box>
           </Box>
 
-          <Box sx={{ width: '100%' }}>
+          <Box sx={{ width: "100%" }}>
             <FormControl component="fieldset">
               <FormLabel component="legend">Tipo de Busca</FormLabel>
               <RadioGroup
                 row
                 value={queryType}
-                onChange={(e) => setQueryType(e.target.value as 'name' | 'exactName' | 'cpf')}
+                onChange={(e) =>
+                  setQueryType(e.target.value as "name" | "exactName" | "cpf")
+                }
               >
-                <FormControlLabel value="name" control={<Radio />} label="Por Nome" />
-                <FormControlLabel value="exactName" control={<Radio />} label="Por Nome Exato" />
-                <FormControlLabel value="cpf" control={<Radio />} label="Por CPF" />
+                <FormControlLabel
+                  value="name"
+                  control={<Radio />}
+                  label="Por Nome"
+                />
+                <FormControlLabel
+                  value="exactName"
+                  control={<Radio />}
+                  label="Por Nome Exato"
+                />
+                <FormControlLabel
+                  value="cpf"
+                  control={<Radio />}
+                  label="Por CPF"
+                />
               </RadioGroup>
             </FormControl>
           </Box>
 
-          <Box sx={{ width: '100%' }}>
-            <TextField
-              fullWidth
-              label={queryType === 'cpf' ? 'CPF' : 'Nome'}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              helperText={queryType === 'cpf' ? 'Digite apenas os 11 dígitos do CPF' : ''}
-            />
+          <Box sx={{ width: "100%" }}>
+            {queryType === "cpf" ? (
+              <PatternFormat
+                customInput={TextField}
+                format="###.###.###-##"
+                mask="_"
+                fullWidth
+                label="CPF"
+                value={searchTerm}
+                onValueChange={(values) => setSearchTerm(values.value)}
+                onKeyPress={handleKeyPress}
+                helperText="Digite o CPF com a máscara"
+              />
+            ) : (
+              <TextField
+                fullWidth
+                label="Nome"
+                value={searchTerm}
+                onChange={handleSearchTermChange}
+                onKeyPress={handleKeyPress}
+              />
+            )}
           </Box>
 
-          <Box sx={{ width: '100%' }}>
+          <Box sx={{ width: "100%" }}>
             <Button
               variant="contained"
               color="primary"
@@ -118,27 +162,43 @@ function App() {
               disabled={loading}
               fullWidth
             >
-              {loading ? 'Buscando...' : 'Buscar'}
+              {loading ? "Buscando..." : "Buscar"}
             </Button>
           </Box>
 
           {error && (
-            <Box sx={{ width: '100%' }}>
+            <Box sx={{ width: "100%" }}>
               <Alert severity="error">{error}</Alert>
             </Box>
           )}
 
           {results && (
-            <Box sx={{ width: '100%' }}>
+            <Box sx={{ width: "100%" }}>
               <Typography variant="h6" gutterBottom>
                 Resultados:
               </Typography>
               {results.map((result, index) => (
-                <Box key={index} sx={{ mb: 2, p: 2, border: '1px solid #ccc', borderRadius: 1 }}>
-                  <Typography><strong>CPF:</strong> {result.cpf}</Typography>
-                  <Typography><strong>Nome:</strong> {result.nome}</Typography>
-                  <Typography><strong>Sexo:</strong> {result.sexo}</Typography>
-                  <Typography><strong>Data de Nascimento:</strong> {result.nasc}</Typography>
+                <Box
+                  key={index}
+                  sx={{
+                    mb: 2,
+                    p: 2,
+                    border: "1px solid #ccc",
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography>
+                    <strong>CPF:</strong> {result.cpf}
+                  </Typography>
+                  <Typography>
+                    <strong>Nome:</strong> {result.nome}
+                  </Typography>
+                  <Typography>
+                    <strong>Sexo:</strong> {result.sexo}
+                  </Typography>
+                  <Typography>
+                    <strong>Data de Nascimento:</strong> {result.nasc}
+                  </Typography>
                 </Box>
               ))}
             </Box>
@@ -149,4 +209,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;
