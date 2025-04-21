@@ -1,11 +1,14 @@
 {
   "main": "dist-electron/main.js",
   "name": "client-server_multithread",
+  "author": "Rafael Luz Melo",
+  "description": "A simple Electron app with a React frontend using Vite and Electron Builder for packaging. It includes a main process that handles TCP connections and gets data from a server. The app is designed to be cross-platform, with support for Windows and Linux. It uses TypeScript for type safety and Electron Builder for creating distributable packages.",
   "private": true,
   "version": "0.0.0",
   "type": "commonjs",
   "build": {
-    "appId": "com.seuprojeto.app",
+    "asarUnpack": ["**/*.node", "*.dll",  "*.so"],
+    "appId": "com.capivaraCoorp.app",
     "productName": "capivaraCoorp",
     "directories": {
       "output": "release"
@@ -17,8 +20,19 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
-    }
+      "target": "nsis",
+      "icon": "public/capivaraLogo.ico",
+      "signAndEditExecutable": false
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "public/capivaraLogo.ico"
+    },
+    "asar": true,
+    "forceCodeSigning": false
   },
   "scripts": {
     "dev": "vite",
@@ -41,6 +55,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^7.0.2",
     "@mui/material": "^7.0.1",
     "react-number-format": "^5.4.3"
   }
