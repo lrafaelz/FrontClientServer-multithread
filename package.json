@@ -32,9 +32,12 @@
       "icon": "public/capivaraLogo.png",
       "category": "Utility",
       "desktop": {
-        "Name": "Capivara Coorp",
-        "Comment": "Client Server Multithread Application",
-        "Categories": "Utility;Network"
+        "entry": {
+          "Name": "Capivara Coorp",
+          "Comment": "Client Server Multithread Application",
+          "Categories": "Utility;Network",
+          "Type": "Application"
+        }
       }
     },
     "asar": true,
