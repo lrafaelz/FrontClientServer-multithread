@@ -14,11 +14,11 @@ ctx.onmessage = async (event) => {
       { type: "module" }
     );
 
-    // Configurar worker de progresso
+    // Configurar worker de progresso com tempos otimizados
     progressWorker.postMessage({
       queryId,
-      estimatedTime: 30000, // 30 segundos estimados
-      updateInterval: 100, // atualizar a cada 100ms
+      estimatedTime: 15000, // Reduzido para 15 segundos
+      updateInterval: 50, // Atualiza mais frequentemente
     });
 
     // Repassar atualizações de progresso
@@ -27,6 +27,8 @@ ctx.onmessage = async (event) => {
     };
 
     let response;
+    const startTime = Date.now();
+
     if (queryType === "name") {
       response = await client.getPersonByName(searchTerm);
     } else if (queryType === "exactName") {
@@ -44,7 +46,7 @@ ctx.onmessage = async (event) => {
       data: {
         queryId,
         results: response,
-        totalTime: Date.now() - event.data.startTime,
+        totalTime: Date.now() - startTime,
       },
     });
   } catch (error) {

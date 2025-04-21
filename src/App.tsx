@@ -5,7 +5,6 @@ import {
   Button,
   Typography,
   Box,
-  Grid,
   RadioGroup,
   FormControlLabel,
   Radio,
@@ -17,6 +16,7 @@ import {
   AccordionDetails,
   LinearProgress,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { PatternFormat } from "react-number-format";
 import { QueryResult } from "./services/TCPClient";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -33,7 +33,7 @@ interface QueryState {
 }
 
 function App() {
-  const [host, setHost] = useState("localhost");
+  const [host, setHost] = useState(" 192.168.0.102");
   const [port, setPort] = useState("5000");
   const [searchTerm, setSearchTerm] = useState("");
   const [queryType, setQueryType] = useState<"name" | "exactName" | "cpf">(
@@ -206,60 +206,68 @@ function App() {
           </Box>
 
           <Box sx={{ width: "100%", mt: 4 }}>
-            {queries.map((query) => (
-              <Accordion key={query.id}>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography>
-                    Busca por {query.queryType}: {query.searchTerm}
-                  </Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  {query.status === "pending" && (
-                    <Box sx={{ width: "100%", mb: 2 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={query.progress}
-                      />
-                      <Typography variant="body2" color="text.secondary">
-                        Tempo decorrido:{" "}
-                        {((Date.now() - query.startTime) / 1000).toFixed(1)}s
+            <Grid container spacing={2}>
+              {queries.map((query) => (
+                <Grid size={{ xs: 12, md: 6 }} key={query.id}>
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography>
+                        Busca por {query.queryType}: {query.searchTerm}
                       </Typography>
-                    </Box>
-                  )}
-
-                  {query.error && <Alert severity="error">{query.error}</Alert>}
-
-                  {query.results && (
-                    <Box>
-                      {query.results.map((result, index) => (
-                        <Box
-                          key={index}
-                          sx={{
-                            mb: 2,
-                            p: 2,
-                            border: "1px solid #ccc",
-                            borderRadius: 1,
-                          }}
-                        >
-                          <Typography>
-                            <strong>CPF:</strong> {result.cpf}
-                          </Typography>
-                          <Typography>
-                            <strong>Nome:</strong> {result.nome}
-                          </Typography>
-                          <Typography>
-                            <strong>Sexo:</strong> {result.sexo}
-                          </Typography>
-                          <Typography>
-                            <strong>Data de Nascimento:</strong> {result.nasc}
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {query.status === "pending" && (
+                        <Box sx={{ width: "100%", mb: 2 }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={query.progress}
+                          />
+                          <Typography variant="body2" color="text.secondary">
+                            Tempo decorrido:{" "}
+                            {((Date.now() - query.startTime) / 1000).toFixed(1)}
+                            s
                           </Typography>
                         </Box>
-                      ))}
-                    </Box>
-                  )}
-                </AccordionDetails>
-              </Accordion>
-            ))}
+                      )}
+
+                      {query.error && (
+                        <Alert severity="error">{query.error}</Alert>
+                      )}
+
+                      {query.results && (
+                        <Box>
+                          {query.results.map((result, index) => (
+                            <Box
+                              key={index}
+                              sx={{
+                                mb: 2,
+                                p: 2,
+                                border: "1px solid #ccc",
+                                borderRadius: 1,
+                              }}
+                            >
+                              <Typography>
+                                <strong>CPF:</strong> {result.cpf}
+                              </Typography>
+                              <Typography>
+                                <strong>Nome:</strong> {result.nome}
+                              </Typography>
+                              <Typography>
+                                <strong>Sexo:</strong> {result.sexo}
+                              </Typography>
+                              <Typography>
+                                <strong>Data de Nascimento:</strong>{" "}
+                                {result.nasc}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
+                    </AccordionDetails>
+                  </Accordion>
+                </Grid>
+              ))}
+            </Grid>
           </Box>
         </Grid>
       </Box>

@@ -4,28 +4,31 @@ interface ProgressConfig {
   updateInterval: number; // intervalo de atualização em ms
 }
 
-self.onmessage = async (event: MessageEvent<ProgressConfig>) => {
-  const { queryId, estimatedTime, updateInterval } = event.data;
-  let currentProgress = 0;
+const ctx: Worker = self as any;
+
+ctx.onmessage = (event) => {
+  const { queryId, estimatedTime, updateInterval } =
+    event.data as ProgressConfig;
   const startTime = Date.now();
 
   const updateProgress = () => {
-    const elapsedTime = Date.now() - startTime;
-    currentProgress = Math.min((elapsedTime / estimatedTime) * 100, 99);
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(95, (elapsed / estimatedTime) * 100); // Limita a 95% até o resultado final
 
-    self.postMessage({
+    ctx.postMessage({
       type: "progress",
       data: {
         queryId,
-        progress: Math.round(currentProgress),
-        elapsedTime,
+        progress,
       },
     });
 
-    if (currentProgress < 99) {
+    if (progress < 95) {
       setTimeout(updateProgress, updateInterval);
     }
   };
 
   updateProgress();
 };
+
+export {};
