@@ -181,7 +181,7 @@ function App() {
                 value={searchTerm}
                 onValueChange={(values) => setSearchTerm(values.value)}
                 onKeyPress={handleKeyPress}
-                helperText="Digite o CPF com a máscara"
+                helperText="Digite o CPF"
               />
             ) : (
               <TextField
