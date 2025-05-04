@@ -14,6 +14,16 @@ export interface ProgressUpdate {
   results?: QueryResult[];
 }
 
+// Interface para o progresso de múltiplas requisições
+export interface BatchProgressUpdate {
+  completed: number;
+  total: number;
+  progress: number;
+  currentRequest: number;
+  results: QueryResult[];
+  isComplete: boolean;
+}
+
 export class TCPClient {
   private baseUrl: string;
   private requestNumber: number;
@@ -21,13 +31,15 @@ export class TCPClient {
   private retryDelay: number = 1000; // Delay entre tentativas (ms)
   private timeout: number = 8000; // Timeout de cada requisição (ms)
   private onProgressUpdate?: (update: ProgressUpdate) => void;
+  private onBatchProgressUpdate?: (update: BatchProgressUpdate) => void;
 
   constructor(
     host: string,
     port: number,
     useHttps: boolean = true,
     requestNumber: number = 1,
-    onProgressUpdate?: (update: ProgressUpdate) => void
+    onProgressUpdate?: (update: ProgressUpdate) => void,
+    onBatchProgressUpdate?: (update: BatchProgressUpdate) => void
   ) {
     // Configuração simples da URL base
     const protocol = useHttps ? "https" : "http";
@@ -36,6 +48,8 @@ export class TCPClient {
     this.requestNumber = requestNumber;
     // Callback para atualizações de progresso
     this.onProgressUpdate = onProgressUpdate;
+    // Callback para atualizações de progresso em lote
+    this.onBatchProgressUpdate = onBatchProgressUpdate;
   }
 
   private formatCPF(cpf: string): string {
@@ -51,6 +65,13 @@ export class TCPClient {
     }
 
     return justNumbers;
+  }
+
+  private getHeaders(): HeadersInit {
+    return {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
   }
 
   // Método para esperar um tempo específico
@@ -79,15 +100,19 @@ export class TCPClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+        // Browser fetch options - no need for NODE_TLS_REJECT_UNAUTHORIZED in browser
+        const fetchOptions: RequestInit = {
+          method: "GET",
+          headers: this.getHeaders(),
+          signal: controller.signal,
+        };
+
         console.log(
           `[${requestId}] Iniciando requisição streaming para: ${url}`
         );
 
         // Fazemos fetch em modo streaming
-        const response = await fetch(url, {
-          signal: controller.signal,
-          cache: "no-store",
-        });
+        const response = await fetch(url, fetchOptions);
 
         // Limpa o timeout pois a conexão foi estabelecida
         clearTimeout(timeoutId);
@@ -276,10 +301,14 @@ export class TCPClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-        const response = await fetch(url, {
+        // Browser fetch options - no need for NODE_TLS_REJECT_UNAUTHORIZED in browser
+        const fetchOptions: RequestInit = {
+          method: "GET",
+          headers: this.getHeaders(),
           signal: controller.signal,
-          cache: "no-store",
-        });
+        };
+
+        const response = await fetch(url, fetchOptions);
 
         // Limpa o timeout pois a requisição foi concluída
         clearTimeout(timeoutId);
@@ -369,5 +398,68 @@ export class TCPClient {
       console.error(`[${this.requestNumber}] Erro ao buscar por CPF:`, error);
       throw error;
     }
+  }
+
+  // Método para executar múltiplas requisições em sequência
+  async batchQuery(
+    queryType: "name" | "exactName" | "cpf",
+    searchTerms: string[],
+    requestsCount: number
+  ): Promise<QueryResult[]> {
+    const results: QueryResult[] = [];
+    let completed = 0;
+    const total = Math.min(searchTerms.length, requestsCount);
+
+    // Cria uma cópia do array de termos de pesquisa limitada ao número de requisições
+    const termsToProcess = searchTerms.slice(0, requestsCount);
+
+    for (let i = 0; i < termsToProcess.length; i++) {
+      const term = termsToProcess[i];
+      try {
+        console.log(`Processando requisição ${i + 1}/${total}: ${term}`);
+
+        let queryResults: QueryResult[] = [];
+
+        // Executa a consulta apropriada com base no tipo
+        switch (queryType) {
+          case "name":
+            queryResults = await this.getPersonByName(term);
+            break;
+          case "exactName":
+            queryResults = await this.getPersonByExactName(term);
+            break;
+          case "cpf":
+            queryResults = await this.getPersonByCPF(term);
+            break;
+        }
+
+        // Adiciona os resultados ao array de resultados
+        results.push(...queryResults);
+
+        // Incrementa o contador de requisições completadas
+        completed++;
+
+        // Calcula o progresso
+        const progress = (completed / total) * 100;
+
+        // Notifica o progresso do lote
+        if (this.onBatchProgressUpdate) {
+          this.onBatchProgressUpdate({
+            completed,
+            total,
+            progress,
+            currentRequest: i + 1,
+            results: [...results], // Cria uma cópia para evitar referências compartilhadas
+            isComplete: completed === total,
+          });
+        }
+      } catch (error) {
+        console.error(`Erro na requisição ${i + 1} (${term}):`, error);
+        // Continua processando mesmo com erro em uma requisição
+      }
+    }
+
+    // Retorna todos os resultados acumulados
+    return results;
   }
 }
