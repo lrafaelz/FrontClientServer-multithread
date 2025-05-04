@@ -352,15 +352,21 @@ function App() {
   };
 
   const handleQuery = () => {
-    if (!searchTerm) {
-      console.error("Campo de busca vazio");
-      return;
-    }
-
     if (batchMode) {
+      // Verificação para modo de requisições múltiplas
+      if (batchTerms.length === 0) {
+        console.error("Nenhum termo de busca fornecido para consulta em lote");
+        return;
+      }
       // Executa consulta em lote
       handleBatchQuery();
     } else {
+      // Verificação para modo de requisição individual
+      if (!searchTerm) {
+        console.error("Campo de busca vazio");
+        return;
+      }
+
       // Executa consulta individual
       // Incrementa o contador de requisições
       requestCounterRef.current += 1;
