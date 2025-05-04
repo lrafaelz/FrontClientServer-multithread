@@ -7,7 +7,13 @@
   "version": "0.0.0",
   "type": "commonjs",
   "build": {
-    "asarUnpack": ["**/*.node", "*.dll",  "*.so"],
+    "asarUnpack": [
+      "**/*.node",
+      "*.dll",
+      "*.so",
+      "scripts/**/*",
+      "ssl/**/*"
+    ],
     "appId": "com.capivaraCoorp.app",
     "productName": "capivaraCoorp",
     "directories": {
@@ -17,12 +23,32 @@
       "dist/**",
       "dist-electron/**",
       "node_modules/**",
-      "package.json"
+      "package.json",
+      "scripts/**/*",
+      "ssl/**/*"
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
       "icon": "public/capivaraLogo.ico",
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "installerIcon": "public/capivaraLogo.ico",
+      "uninstallerIcon": "public/capivaraLogo.ico",
+      "installerLanguages": ["en-US", "pt-BR"],
+      "language": "3082",
+      "include": "scripts/installer.nsh"
     },
     "linux": {
       "target": [
@@ -39,8 +65,55 @@
           "Categories": "Utility;Network",
           "Type": "Application"
         }
+      },
+      "extraResources": [
+        {
+          "from": "scripts",
+          "to": "scripts"
+        },
+        {
+          "from": "ssl",
+          "to": "ssl"
+        }
+      ]
+    },
+    "deb": {
+      "afterInstall": "scripts/linux-postinstall.sh"
+    },
+    "appImage": {
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "capivaraCoorp"
+        }
       }
     },
+    "mac": {
+      "target": "dmg",
+      "icon": "public/capivaraLogo.png",
+      "extraResources": [
+        {
+          "from": "scripts",
+          "to": "scripts"
+        },
+        {
+          "from": "ssl",
+          "to": "ssl"
+        }
+      ]
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}.${ext}"
+    },
+    "extraResources": [
+      {
+        "from": "scripts",
+        "to": "scripts"
+      },
+      {
+        "from": "ssl",
+        "to": "ssl"
+      }
+    ],
     "asar": true,
     "forceCodeSigning": false
   },
@@ -51,14 +124,19 @@
     "start": "concurrently \"npm run dev\" \"npm run electron\"",
     "build": "vite build && tsc -p tsconfig.electron.json",
     "preview": "vite preview",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "pack": "npm run build && npm run prepare-installers && electron-builder --dir",
+    "dist": "npm run build && npm run prepare-installers && electron-builder --win",
+    "dist-linux": "npm run build && npm run prepare-installers && electron-builder --linux",
+    "dist-mac": "npm run build && npm run prepare-installers && electron-builder --mac",
+    "install-cert": "node scripts/install-cert.js",
+    "prepare-installers": "node scripts/prepare-installers.js"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
     "electron": "^35.1.4",
     "electron-builder": "^26.0.12",
+    "http-proxy-middleware": "^3.0.5",
     "typescript": "~5.7.2",
     "vite": "^6.2.0"
   },

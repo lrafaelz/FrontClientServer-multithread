@@ -3,10 +3,17 @@ import { TCPClient } from "../services/TCPClient";
 const ctx: Worker = self as any;
 
 ctx.onmessage = async (event) => {
-  const { host, port, searchTerm, queryType, queryId } = event.data;
+  const { host, port, searchTerm, queryType, queryId, requestNumber } =
+    event.data;
 
   try {
-    const client = new TCPClient(host, parseInt(port));
+    // Usar o requestNumber que vem do componente App
+    console.log(
+      `[Worker #${requestNumber}] Iniciando consulta de ${queryType}: ${searchTerm}`
+    );
+
+    // Criar cliente com conexão HTTPS direta e passar o requestNumber
+    const client = new TCPClient(host, parseInt(port), true, requestNumber);
 
     // Iniciar worker de progresso
     const progressWorker = new Worker(
@@ -14,11 +21,12 @@ ctx.onmessage = async (event) => {
       { type: "module" }
     );
 
-    // Configurar worker de progresso com tempos otimizados
+    // Configurar worker de progresso
     progressWorker.postMessage({
       queryId,
-      estimatedTime: 15000, // Reduzido para 15 segundos
-      updateInterval: 50, // Atualiza mais frequentemente
+      estimatedTime: 5000,
+      updateInterval: 50,
+      requestNumber, // Passa o número da requisição para o worker de progresso
     });
 
     // Repassar atualizações de progresso
@@ -29,6 +37,11 @@ ctx.onmessage = async (event) => {
     let response;
     const startTime = Date.now();
 
+    console.log(
+      `[Worker #${requestNumber}] Executando consulta para ${searchTerm}`
+    );
+
+    // Executar a consulta apropriada
     if (queryType === "name") {
       response = await client.getPersonByName(searchTerm);
     } else if (queryType === "exactName") {
@@ -36,6 +49,8 @@ ctx.onmessage = async (event) => {
     } else {
       response = await client.getPersonByCPF(searchTerm);
     }
+
+    console.log(`[Worker #${requestNumber}] Consulta concluída com sucesso`);
 
     // Encerrar worker de progresso
     progressWorker.terminate();
@@ -50,6 +65,7 @@ ctx.onmessage = async (event) => {
       },
     });
   } catch (error) {
+    console.error(`[Worker] Erro na consulta #${requestNumber}:`, error);
     ctx.postMessage({
       type: "error",
       data: {

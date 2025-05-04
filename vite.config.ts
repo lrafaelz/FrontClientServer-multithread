@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    // Removido o proxy para evitar problemas com CORS
   },
   worker: {
     // formato 'es' ou 'iife' para o bundle do worker
