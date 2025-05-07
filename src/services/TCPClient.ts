@@ -29,7 +29,7 @@ export class TCPClient {
   private requestNumber: number;
   private maxRetries: number = 3; // Número máximo de tentativas
   private retryDelay: number = 1000; // Delay entre tentativas (ms)
-  private timeout: number = 8000; // Timeout de cada requisição (ms)
+  private timeout: number = 10000;
   private onProgressUpdate?: (update: ProgressUpdate) => void;
   private onBatchProgressUpdate?: (update: BatchProgressUpdate) => void;
 
@@ -98,28 +98,39 @@ export class TCPClient {
 
         // Usando fetch com AbortController para controlar timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-
-        // Browser fetch options - no need for NODE_TLS_REJECT_UNAUTHORIZED in browser
-        const fetchOptions: RequestInit = {
-          method: "GET",
-          headers: this.getHeaders(),
-          signal: controller.signal,
-        };
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          console.warn(
+            `[${requestId}] Tempo limite de ${this.timeout}ms atingido, abortando requisição.`
+          );
+        }, this.timeout);
 
         console.log(
           `[${requestId}] Iniciando requisição streaming para: ${url}`
         );
 
-        // Fazemos fetch em modo streaming
-        const response = await fetch(url, fetchOptions);
+        // Fazemos fetch em modo streaming com tratamento de erro melhorado
+        const response = await fetch(url, {
+          method: "GET",
+          headers: this.getHeaders(),
+          signal: controller.signal,
+          // Desabilitar cache para evitar problemas com requisições pendentes
+          cache: "no-store",
+        }).catch((err) => {
+          clearTimeout(timeoutId);
+          throw err;
+        });
 
         // Limpa o timeout pois a conexão foi estabelecida
         clearTimeout(timeoutId);
 
+        // Verifica resposta
         if (!response.ok) {
+          const errorText = await response
+            .text()
+            .catch(() => "Não foi possível ler o corpo da resposta");
           throw new Error(
-            `Erro na requisição: ${response.status} ${response.statusText}`
+            `Erro na requisição: ${response.status} ${response.statusText}. Detalhes: ${errorText}`
           );
         }
 
@@ -237,6 +248,10 @@ export class TCPClient {
             endTime - startTime
           }ms`
         );
+
+        // Após o processamento, você precisa garantir que o reader e a resposta sejam fechados
+        reader.releaseLock();
+        response.body.cancel();
 
         // Se chegamos aqui com sucesso, retornamos os resultados
         return results;

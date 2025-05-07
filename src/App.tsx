@@ -18,6 +18,7 @@ import {
   Switch,
   LinearProgress,
   Paper,
+  Tooltip,
 } from "@mui/material";
 import Grid from "@mui/material/Grid";
 import { PatternFormat } from "react-number-format";
@@ -27,6 +28,7 @@ import {
   ProgressUpdate,
   BatchProgressUpdate,
 } from "./services/TCPClient";
+import { WorkerManager } from "./services/WorkerManager";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 interface QueryState {
@@ -60,7 +62,7 @@ interface BatchQueryState {
 }
 
 function App() {
-  const [host, setHost] = useState("192.168.0.102");
+  const [host, setHost] = useState("192.168.1.104");
   const [port, setPort] = useState("5000");
   const [searchTerm, setSearchTerm] = useState("");
   const [queryType, setQueryType] = useState<"name" | "exactName" | "cpf">(
@@ -77,14 +79,34 @@ function App() {
   const [batchTerms, setBatchTerms] = useState<string[]>([]);
   const [batchTermsInput, setBatchTermsInput] = useState("");
 
-  // Limpando intervalos quando o componente é desmontado
+  // Novo estado para controlar se usamos workers ou não
+  const [useWorkers, setUseWorkers] = useState(true);
+  // Referência ao WorkerManager
+  const workerManagerRef = useRef<WorkerManager | null>(null);
+
+  // Inicializa o WorkerManager
   useEffect(() => {
+    workerManagerRef.current = new WorkerManager(useWorkers);
+
+    // Limpeza quando o componente é desmontado
     return () => {
+      if (workerManagerRef.current) {
+        workerManagerRef.current.cancelAllQueries();
+        workerManagerRef.current = null;
+      }
+
       Object.values(progressIntervalsRef.current).forEach((intervalId) => {
         window.clearInterval(intervalId);
       });
     };
-  }, []);
+  }, [useWorkers]); // Adicionado useWorkers como dependência para recriar o WorkerManager quando a opção mudar
+
+  // Atualiza o WorkerManager quando a opção de useWorkers muda
+  useEffect(() => {
+    if (workerManagerRef.current) {
+      workerManagerRef.current.useWorkers = useWorkers;
+    }
+  }, [useWorkers]);
 
   const handleKeyPress = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -102,8 +124,6 @@ function App() {
   // Função para processar atualizações de progresso do servidor
   const handleProgressUpdate =
     (queryId: string) => (update: ProgressUpdate) => {
-      console.log(`Recebida atualização para consulta ${queryId}:`, update);
-
       setQueries((prev) =>
         prev.map((q) => {
           if (q.id === queryId) {
@@ -187,7 +207,77 @@ function App() {
     };
   };
 
-  // Função que substitui o queryWorker com async/await
+  // Função para executar consulta usando o WorkerManager (substitui performQuery)
+  const performQueryWithWorkerManager = (query: QueryState) => {
+    if (!workerManagerRef.current) {
+      console.error("WorkerManager não inicializado");
+      return;
+    }
+
+    // Atualiza o status inicial
+    setQueries((prev) =>
+      prev.map((q) =>
+        q.id === query.id
+          ? { ...q, statusMessage: "Iniciando consulta...", progress: 0 }
+          : q
+      )
+    );
+
+    // Configurar as callbacks
+    const callbacks = {
+      onProgress: handleProgressUpdate(query.id),
+      onComplete: (results: QueryResult[]) => {
+        setQueries((prev) =>
+          prev.map((q) =>
+            q.id === query.id
+              ? {
+                  ...q,
+                  results,
+                  status: "completed",
+                  progress: 100,
+                  statusMessage: "Consulta concluída com sucesso",
+                }
+              : q
+          )
+        );
+      },
+      onError: (errorMessage: string) => {
+        console.error(
+          `[#${query.requestNumber}] Erro na consulta:`,
+          errorMessage
+        );
+
+        setQueries((prev) =>
+          prev.map((q) =>
+            q.id === query.id
+              ? {
+                  ...q,
+                  error: errorMessage,
+                  status: "error",
+                  statusMessage: "Erro na consulta após múltiplas tentativas",
+                }
+              : q
+          )
+        );
+      },
+    };
+
+    // Executar a consulta usando o WorkerManager
+    workerManagerRef.current.executeQuery(
+      {
+        host,
+        port: parseInt(port),
+        searchTerm: query.searchTerm,
+        queryType: query.queryType,
+        queryId: query.id,
+        requestNumber: query.requestNumber,
+        useProgressWorker: query.queryType === "cpf", // Usar progressWorker apenas para CPF
+      },
+      callbacks
+    );
+  };
+
+  // Função que implementa o método de consulta original (mantida para compatibilidade)
   const performQuery = async (query: QueryState) => {
     try {
       console.log(
@@ -272,7 +362,90 @@ function App() {
     }
   };
 
-  // Função para processar consultas em lote
+  // Função modificada para processar consultas em lote com WorkerManager
+  const performBatchQueryWithWorkerManager = (batchQuery: BatchQueryState) => {
+    if (!workerManagerRef.current) {
+      console.error("WorkerManager não inicializado");
+      return;
+    }
+
+    // Atualiza o status para indicar que o processamento está começando
+    setBatchQueries((prev) =>
+      prev.map((b) =>
+        b.id === batchQuery.id
+          ? { ...b, statusMessage: "Iniciando processamento em lote..." }
+          : b
+      )
+    );
+
+    const results: QueryResult[] = [];
+    let completed = 0;
+    const total = Math.min(
+      batchQuery.searchTerms.length,
+      batchQuery.numberOfRequests
+    );
+    const termsToProcess = batchQuery.searchTerms.slice(
+      0,
+      batchQuery.numberOfRequests
+    );
+
+    // Função auxiliar para atualizar o progresso do lote
+    const updateBatchProgress = () => {
+      const progress = (completed / total) * 100;
+
+      setBatchQueries((prev) =>
+        prev.map((b) =>
+          b.id === batchQuery.id
+            ? {
+                ...b,
+                completed,
+                progress,
+                results: [...results],
+                statusMessage: `Processadas ${completed}/${total} requisições (${Math.round(
+                  progress
+                )}%)`,
+                status: completed === total ? "completed" : "pending",
+              }
+            : b
+        )
+      );
+    };
+
+    // Processa cada termo do lote
+    termsToProcess.forEach((term, index) => {
+      const queryId = `${batchQuery.id}-${index}`;
+      requestCounterRef.current += 1;
+
+      workerManagerRef.current!.executeQuery(
+        {
+          host,
+          port: parseInt(port),
+          searchTerm: term,
+          queryType: batchQuery.queryType,
+          queryId,
+          requestNumber: requestCounterRef.current,
+        },
+        {
+          onComplete: (termResults) => {
+            // Adiciona resultados ao array global
+            results.push(...termResults);
+            completed++;
+            updateBatchProgress();
+          },
+          onError: (error) => {
+            console.error(
+              `Erro na consulta do lote para termo ${term}:`,
+              error
+            );
+            completed++;
+            updateBatchProgress();
+          },
+        }
+      );
+    });
+  };
+
+  // Função para processar consultas em lote (método original)
   const performBatchQuery = async (batchQuery: BatchQueryState) => {
     try {
       console.log(
@@ -395,8 +568,12 @@ function App() {
 
       console.log(`Iniciando requisição #${currentRequestNumber}`);
 
-      // Executa a consulta de forma assíncrona
-      performQuery(newQuery);
+      // Executa a consulta com o WorkerManager ou método original
+      if (workerManagerRef.current) {
+        performQueryWithWorkerManager(newQuery);
+      } else {
+        performQuery(newQuery);
+      }
     }
   };
 
@@ -431,8 +608,12 @@ function App() {
 
     console.log(`Iniciando lote de ${newBatchQuery.total} requisições`);
 
-    // Executa o processamento em lote
-    performBatchQuery(newBatchQuery);
+    // Executa o processamento em lote com o WorkerManager ou método original
+    if (workerManagerRef.current) {
+      performBatchQueryWithWorkerManager(newBatchQuery);
+    } else {
+      performBatchQuery(newBatchQuery);
+    }
   };
 
   // Função para lidar com a entrada de termos em lote
@@ -533,7 +714,14 @@ function App() {
               </FormControl>
             </Grid>
 
-            <Grid size={12}>
+            <Grid
+              size={12}
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
               <FormControlLabel
                 control={
                   <Switch
@@ -543,6 +731,24 @@ function App() {
                 }
                 label="Modo de requisições múltiplas"
               />
+
+              <Tooltip
+                title={
+                  useWorkers
+                    ? "Usando Web Workers para máximo paralelismo"
+                    : "Usando await direto (limite de 6 conexões)"
+                }
+              >
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={useWorkers}
+                      onChange={() => setUseWorkers(!useWorkers)}
+                    />
+                  }
+                  label="Usar Web Workers"
+                />
+              </Tooltip>
             </Grid>
 
             {!batchMode ? (

@@ -47,31 +47,61 @@ if (!gotTheLock) {
 
       const isDev = !app.isPackaged;
 
-      // Configurações para HTTPS e CORS
+      // Configurações para HTTPS e CORS - usar Origin dinâmico baseado no endereço que o usuário define
       session.defaultSession.webRequest.onBeforeSendHeaders(
         (details, callback) => {
-          details.requestHeaders["Origin"] = "https://192.168.0.102:5000";
+          // Não define um Origin fixo, permite que o Origin seja definido pelo navegador
+          // Isso evita problemas quando o usuário muda o endereço do servidor
+          if (!details.requestHeaders["Origin"]) {
+            // Definir apenas se não existir, para não substituir o que o navegador está enviando
+            details.requestHeaders["Origin"] = "*";
+          }
+
+          // Adiciona cabeçalhos para evitar cache que pode causar problemas
+          details.requestHeaders["Cache-Control"] = "no-cache";
+          details.requestHeaders["Pragma"] = "no-cache";
+
           callback({ requestHeaders: details.requestHeaders });
         }
       );
 
       session.defaultSession.webRequest.onHeadersReceived(
         (details, callback) => {
-          if (details.responseHeaders) {
-            details.responseHeaders["Access-Control-Allow-Origin"] = ["*"];
-            details.responseHeaders["Access-Control-Allow-Methods"] = ["*"];
-            details.responseHeaders["Access-Control-Allow-Headers"] = ["*"];
+          if (!details.responseHeaders) {
+            details.responseHeaders = {};
           }
-          callback({ responseHeaders: details.responseHeaders || {} });
+
+          // Configurar CORS de forma mais permissiva
+          details.responseHeaders["Access-Control-Allow-Origin"] = ["*"];
+          details.responseHeaders["Access-Control-Allow-Methods"] = [
+            "GET",
+            "POST",
+            "OPTIONS",
+            "PUT",
+            "DELETE",
+          ];
+          details.responseHeaders["Access-Control-Allow-Headers"] = [
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+            "Origin",
+            "Accept",
+          ];
+          details.responseHeaders["Access-Control-Allow-Credentials"] = [
+            "true",
+          ];
+
+          callback({ responseHeaders: details.responseHeaders });
         }
       );
 
-      // Certificados HTTPS
+      // Certificados HTTPS - configuração mais robusta
       app.on(
         "certificate-error",
         (event, webContents, url, error, certificate, callback) => {
+          console.log(`Ignorando erro de certificado para: ${url}`);
           event.preventDefault();
-          callback(true);
+          callback(true); // Aceitar o certificado
         }
       );
 
