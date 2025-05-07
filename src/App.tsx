@@ -302,12 +302,15 @@ function App() {
         handleBatchProgressUpdate(batchQuery.id) // Callback para progresso em lote
       );
 
-      // Executar a consulta em lote
-      const results = await client.batchQuery(
-        batchQuery.queryType,
-        batchQuery.searchTerms,
-        batchQuery.numberOfRequests
+      // Executar todas as consultas em paralelo
+      const promises = batchQuery.searchTerms.map((term) =>
+        client.batchQuery(batchQuery.queryType, [term], 1)
       );
+
+      const resultsArray = await Promise.all(promises);
+
+      // Combina os resultados de todas as requisições
+      const results = resultsArray.flat();
 
       console.log(
         `[Lote #${batchQuery.id}] Processamento em lote concluído com sucesso`
