@@ -307,24 +307,21 @@ class ResultProcessor(QObject):
 
 class WorkerManager(QObject):
     """
-    Manages parallel execution of queries using workers
+    Gerencia execução paralela de consultas usando threads
     """
-    def __init__(self, use_workers: bool = True):
+    def __init__(self, use_workers: bool = False):
         super().__init__()
         
-        # Worker execution flag
-        self._use_workers = use_workers
-        
         # Connection limits
-        self.max_connections = 4
+        self.max_connections = multiprocessing.cpu_count()
         self.active_connections = 0
         
         # Pending queries
         self.pending_queries = []
         self.active_workers = {}
         
-        # Queue for worker results
-        self.result_queue = multiprocessing.Queue() if use_workers else queue.Queue()
+        # Queue for thread results (sempre usando queue.Queue)
+        self.result_queue = queue.Queue()
         
         # Result processor
         self.result_processor = ResultProcessor()
@@ -339,16 +336,6 @@ class WorkerManager(QObject):
         self.result_thread = Thread(target=self._process_results)
         self.result_thread.daemon = True
         self.result_thread.start()
-    
-    @property
-    def use_workers(self) -> bool:
-        """Get worker usage setting"""
-        return self._use_workers
-    
-    @use_workers.setter
-    def use_workers(self, value: bool):
-        """Set worker usage setting"""
-        self._use_workers = value
     
     def _process_results(self):
         """Process results from the result queue"""
@@ -434,16 +421,10 @@ class WorkerManager(QObject):
         query_id = options.get("query_id")
         print(f"Executing query {query_id}. Active connections: {self.active_connections}")
         
-        # Create and start worker
-        if self._use_workers:
-            worker = Worker(options, self.result_queue)
-            worker.start()
-            self.active_workers[query_id] = worker
-        else:
-            # Use threaded executor instead of multiprocessing
-            executor = ThreadedExecutor(options, self.result_queue)
-            executor.start()
-            self.active_workers[query_id] = executor
+        # Sempre usar ThreadedExecutor (modo sem worker) que demonstrou melhor desempenho
+        executor = ThreadedExecutor(options, self.result_queue)
+        executor.start()
+        self.active_workers[query_id] = executor
     
     def cancel_query(self, query_id: str):
         """

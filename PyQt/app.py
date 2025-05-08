@@ -22,8 +22,11 @@ class MainWindow(QMainWindow):
         # Request counter for identifying requests
         self.request_counter = 0
         
+        # Dictionary to store request start times
+        self.request_times = {}
+        
         # Initialize worker manager
-        self.worker_manager = WorkerManager()
+        self.worker_manager = WorkerManager(use_workers=False)  # Configurado para sempre usar modo sem worker
         
         # Set up the UI
         self.setup_ui()
@@ -37,7 +40,7 @@ class MainWindow(QMainWindow):
         connection_group = QGroupBox("Configurações de Conexão")
         connection_layout = QFormLayout()
         
-        self.host_input = QLineEdit("192.168.1.104")
+        self.host_input = QLineEdit("192.168.0.101")
         self.port_input = QLineEdit("5000")
         connection_layout.addRow("Host:", self.host_input)
         connection_layout.addRow("Porta:", self.port_input)
@@ -78,11 +81,8 @@ class MainWindow(QMainWindow):
         # Batch mode checkbox
         batch_mode_layout = QHBoxLayout()
         self.batch_mode_checkbox = QCheckBox("Modo de requisições múltiplas")
-        self.use_workers_checkbox = QCheckBox("Usar Workers")
-        self.use_workers_checkbox.setChecked(True)
         
         batch_mode_layout.addWidget(self.batch_mode_checkbox)
-        batch_mode_layout.addWidget(self.use_workers_checkbox)
         search_layout.addLayout(batch_mode_layout)
         
         # Batch size input (hidden by default)
@@ -111,7 +111,6 @@ class MainWindow(QMainWindow):
         
         # Connect batch mode checkbox
         self.batch_mode_checkbox.stateChanged.connect(self.toggle_batch_mode)
-        self.use_workers_checkbox.stateChanged.connect(self.toggle_workers)
         self.file_upload_button.clicked.connect(self.load_file)
         
         # Search button
@@ -125,8 +124,8 @@ class MainWindow(QMainWindow):
         # Individual queries tab
         self.queries_tab = QWidget()
         queries_layout = QVBoxLayout(self.queries_tab)
-        self.queries_table = QTableWidget(0, 4)
-        self.queries_table.setHorizontalHeaderLabels(["ID", "Termo", "Status", "Progresso"])
+        self.queries_table = QTableWidget(0, 5)
+        self.queries_table.setHorizontalHeaderLabels(["ID", "Termo", "Status", "Progresso", "Tempo (s)"])
         self.queries_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         queries_layout.addWidget(self.queries_table)
         
@@ -139,8 +138,8 @@ class MainWindow(QMainWindow):
         # Batch queries tab
         self.batch_tab = QWidget()
         batch_layout = QVBoxLayout(self.batch_tab)
-        self.batch_table = QTableWidget(0, 4)
-        self.batch_table.setHorizontalHeaderLabels(["ID de Lote", "Status", "Progresso", "Resultados"])
+        self.batch_table = QTableWidget(0, 5)
+        self.batch_table.setHorizontalHeaderLabels(["ID de Lote", "Status", "Progresso", "Resultados", "Tempo Total (s)"])
         self.batch_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         batch_layout.addWidget(self.batch_table)
         
@@ -165,10 +164,6 @@ class MainWindow(QMainWindow):
             self.search_button.setText("Executar Requisições em Lote")
         else:
             self.search_button.setText("Buscar")
-            
-    def toggle_workers(self, state):
-        # Update worker manager setting
-        self.worker_manager.use_workers = state == Qt.Checked
     
     def load_file(self):
         # Open file dialog to select a file
@@ -256,6 +251,9 @@ class MainWindow(QMainWindow):
         self.request_counter += 1
         query_id = f"query_{self.request_counter}_{int(time.time() * 1000)}"
         
+        # Registrar o tempo inicial da requisição
+        self.request_times[query_id] = time.time()
+        
         # Get query type
         query_type = self.get_query_type()
         
@@ -275,6 +273,7 @@ class MainWindow(QMainWindow):
         progress_bar.setRange(0, 100)
         progress_bar.setValue(0)
         self.queries_table.setCellWidget(row_position, 3, progress_bar)
+        self.queries_table.setItem(row_position, 4, QTableWidgetItem("Calculando..."))
         
         # Define callbacks
         def on_progress(update):
@@ -282,13 +281,23 @@ class MainWindow(QMainWindow):
             self.queries_table.setItem(row_position, 2, QTableWidgetItem(update["status"]))
             
         def on_complete(results):
+            # Calcular o tempo de execução
+            elapsed_time = time.time() - self.request_times.get(query_id, time.time())
+            elapsed_str = f"{elapsed_time:.2f}"
+            
             progress_bar.setValue(100)
             self.queries_table.setItem(row_position, 2, QTableWidgetItem("Concluído"))
+            self.queries_table.setItem(row_position, 4, QTableWidgetItem(elapsed_str))
             self.display_results(results)
             
         def on_error(error):
+            # Calcular o tempo até o erro
+            elapsed_time = time.time() - self.request_times.get(query_id, time.time())
+            elapsed_str = f"{elapsed_time:.2f}"
+            
             progress_bar.setValue(0)
             self.queries_table.setItem(row_position, 2, QTableWidgetItem(f"Erro: {error}"))
+            self.queries_table.setItem(row_position, 4, QTableWidgetItem(elapsed_str))
             QMessageBox.warning(self, "Erro na Consulta", f"Ocorreu um erro: {error}")
         
         # Execute query
@@ -315,6 +324,9 @@ class MainWindow(QMainWindow):
         # Create batch ID
         batch_id = f"batch_{int(time.time() * 1000)}"
         
+        # Registrar o tempo inicial do lote de consultas
+        self.request_times[batch_id] = time.time()
+        
         # Add batch to table
         row_position = self.batch_table.rowCount()
         self.batch_table.insertRow(row_position)
@@ -324,6 +336,7 @@ class MainWindow(QMainWindow):
         self.batch_table.setItem(row_position, 0, QTableWidgetItem(f"Lote #{row_position+1} ({terms_to_process} termos)"))
         self.batch_table.setItem(row_position, 1, QTableWidgetItem("Pendente"))
         self.batch_table.setItem(row_position, 3, QTableWidgetItem("0"))
+        self.batch_table.setItem(row_position, 4, QTableWidgetItem("Calculando..."))
         
         # Create progress bar
         progress_bar = QProgressBar()
@@ -364,6 +377,12 @@ class MainWindow(QMainWindow):
                     # Check if batch is complete
                     if completed_queries >= terms_to_process:
                         self.batch_table.setItem(row_position, 1, QTableWidgetItem("Concluído"))
+                        
+                        # Calcular o tempo total de execução do lote
+                        elapsed_time = time.time() - self.request_times.get(batch_id, time.time())
+                        elapsed_str = f"{elapsed_time:.2f}"
+                        self.batch_table.setItem(row_position, 4, QTableWidgetItem(elapsed_str))
+                        
                         self.display_results(all_results)
                         
                 return on_complete
@@ -387,6 +406,12 @@ class MainWindow(QMainWindow):
                     if completed_queries >= terms_to_process:
                         self.batch_table.setItem(row_position, 1, 
                                                QTableWidgetItem("Concluído com erros"))
+                        
+                        # Calcular o tempo total de execução do lote
+                        elapsed_time = time.time() - self.request_times.get(batch_id, time.time())
+                        elapsed_str = f"{elapsed_time:.2f}"
+                        self.batch_table.setItem(row_position, 4, QTableWidgetItem(elapsed_str))
+                        
                         self.display_results(all_results)
                         
                 return on_error

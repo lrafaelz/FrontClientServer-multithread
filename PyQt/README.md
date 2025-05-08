@@ -1,20 +1,15 @@
-Claro! Aqui está a tradução completa do seu `README.md` para o **português**:
-
----
-
 # Ferramenta de Consulta de CPF - Cliente PyQt
 
-Uma aplicação desktop para consultar o banco de dados de CPF usando uma conexão segura TCP/SSL. Esta aplicação cliente oferece uma interface amigável para consultas individuais e em lote.
+Uma aplicação desktop para consultar o banco de dados de CPF usando uma conexão segura TCP/SSL. Esta aplicação cliente oferece uma interface desenvolvida em PyQt para consultas individuais e em lote.
 
 ## Funcionalidades
 
-* **Interface amigável**: Interface limpa construída com PyQt5
 * **Várias opções de busca**: Pesquisa por nome, nome exato ou CPF
 * **Processamento em lote**: Execute múltiplas consultas simultaneamente
 * **Processamento paralelo**: Modos opcionais com multithreading e multiprocessing
-* **Progresso em tempo real**: Atualizações ao vivo durante as consultas
+* **Progresso em tempo real**: Atualizações do progresso das consultas
 * **Comunicação segura**: SSL/TLS para comunicação segura cliente-servidor
-* **Tratamento de erros**: Recuperação robusta com lógica de repetição automática
+* **Tratamento de erros**: Recuperação com lógica de repetição automática
 
 ## Arquitetura
 
@@ -26,7 +21,7 @@ Cliente PyQt
 ├── Interface do Usuário (app.py, main.py)
 │   └── Janela principal, campos de entrada, tabelas, barras de progresso
 │
-├── Lógica de Negócio (services/worker_manager.py)
+├── Lógica de consultas (services/worker_manager.py)
 │   ├── WorkerManager: Gerencia a execução paralela das consultas
 │   ├── Worker/ThreadedExecutor: Processa consultas em paralelo
 │   └── ResultProcessor: Lida com os resultados e callbacks

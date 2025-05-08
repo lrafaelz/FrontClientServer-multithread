@@ -20,7 +20,7 @@ class TimeoutSession(requests.Session):
     """
     Custom requests Session that resets read timeout when data is received.
     """
-    def __init__(self, timeout=30.0):
+    def __init__(self, timeout=240.0):
         super().__init__()
         self.timeout = timeout
         self.last_activity = time.time()
@@ -62,8 +62,8 @@ class TCPClient:
         self.request_number = request_number
         self.on_progress_update = on_progress_update
         self.max_retries = 3
-        self.retry_delay = 1.0  # seconds
-        self.timeout = 10.0  # seconds
+        self.retry_delay = 240
+        self.timeout = 240 
         
         # Set up SSL context with our certificates
         self.cert_path = self._get_ssl_cert_path()
@@ -154,7 +154,7 @@ class TCPClient:
                 
                 # Retry with delay if attempts remain
                 if retry_count <= self.max_retries:
-                    wait_time = self.retry_delay * retry_count
+                    wait_time = self.retry_delay
                     print(f"[{self.request_number}] Waiting {wait_time}s before next attempt")
                     self._delay(wait_time)
         
