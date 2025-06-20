@@ -7,7 +7,7 @@ interface QueryWorkerMessage {
   host: string;
   port: number;
   searchTerm: string;
-  queryType: "name" | "exactName" | "cpf";
+  queryType: "name" | "exactName" | "cpf" | "cnpj";
   queryId: string;
   requestNumber: number;
   useProgressWorker?: boolean;
@@ -154,8 +154,8 @@ ctx.onmessage = async (event) => {
     // Reinicializar progressWorker para garantir estado limpo
     progressWorker = null;
 
-    // Iniciar worker de progresso apenas se useProgressWorker for true e for uma consulta de CPF
-    if (useProgressWorker && queryType === "cpf") {
+    // Iniciar worker de progresso apenas se useProgressWorker for true e for uma consulta de CPF ou CNPJ
+    if (useProgressWorker && (queryType === "cpf" || queryType === "cnpj")) {
       try {
         progressWorker = new Worker(
           new URL("./progressWorker.ts", import.meta.url),
@@ -209,8 +209,14 @@ ctx.onmessage = async (event) => {
         response = await client.getPersonByName(searchTerm);
       } else if (queryType === "exactName") {
         response = await client.getPersonByExactName(searchTerm);
-      } else {
+      } else if (queryType === "cpf") {
         response = await client.getPersonByCPF(searchTerm);
+      } else if (queryType === "cnpj") {
+        // TODO: Implementar quando tiver a URL da API
+        console.log("Consulta CNPJ no worker:", searchTerm);
+        throw new Error("Consulta CNPJ ainda não implementada no servidor");
+      } else {
+        throw new Error(`Tipo de consulta não suportado: ${queryType}`);
       }
     } catch (requestError: any) {
       // Tratar erros específicos da requisição

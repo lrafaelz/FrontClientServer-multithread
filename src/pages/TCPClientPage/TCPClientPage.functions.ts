@@ -1,0 +1,469 @@
+import { useState, useRef, useEffect } from "react";
+import {
+  QueryResult,
+  TCPClient,
+  ProgressUpdate,
+  BatchProgressUpdate,
+} from "../../services/TCPClient";
+import { WorkerManager } from "../../services/WorkerManager";
+import { useAuth } from "../../contexts/AuthContext";
+
+// Types
+export type QueryType = "name" | "exactName" | "cpf" | "cnpj";
+
+// Interfaces
+export interface QueryState {
+  id: string;
+  searchTerm: string;
+  queryType: QueryType;
+  results: QueryResult[] | null;
+  error: string | null;
+  progress: number;
+  status: "pending" | "completed" | "error";
+  startTime: number;
+  requestNumber: number;
+  retryCount: number;
+  statusMessage: string;
+}
+
+export interface BatchQueryState {
+  id: string;
+  queryType: QueryType;
+  searchTerms: string[];
+  numberOfRequests: number;
+  results: QueryResult[];
+  completed: number;
+  total: number;
+  progress: number;
+  status: "pending" | "completed" | "error";
+  error: string | null;
+  startTime: number;
+  statusMessage: string;
+}
+
+// Validation functions
+export const validateCPF = (cpf: string): boolean => {
+  const cleanCPF = cpf.replace(/\D/g, "");
+
+  if (cleanCPF.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(cleanCPF)) return false; // All same digits
+
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(cleanCPF.charAt(i)) * (10 - i);
+  }
+  let remainder = 11 - (sum % 11);
+  if (remainder === 10 || remainder === 11) remainder = 0;
+  if (remainder !== parseInt(cleanCPF.charAt(9))) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(cleanCPF.charAt(i)) * (11 - i);
+  }
+  remainder = 11 - (sum % 11);
+  if (remainder === 10 || remainder === 11) remainder = 0;
+  if (remainder !== parseInt(cleanCPF.charAt(10))) return false;
+
+  return true;
+};
+
+export const validateCNPJ = (cnpj: string): boolean => {
+  const cleanCNPJ = cnpj.replace(/\D/g, "");
+
+  if (cleanCNPJ.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(cleanCNPJ)) return false; // All same digits
+
+  // Pesos para o primeiro dígito verificador
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+
+  // Calcular primeiro dígito verificador
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(cleanCNPJ.charAt(i)) * weights1[i];
+  }
+  let remainder = sum % 11;
+  const digit1 = remainder < 2 ? 0 : 11 - remainder;
+  if (digit1 !== parseInt(cleanCNPJ.charAt(12))) return false;
+
+  // Pesos para o segundo dígito verificador (incluindo o primeiro dígito verificador)
+  const weights2 = [6, 7, 8, 9, 2, 3, 4, 5, 6, 7, 8, 9, 2];
+
+  // Calcular segundo dígito verificador (incluindo o primeiro dígito verificador)
+  sum = 0;
+  for (let i = 0; i < 13; i++) {
+    sum += parseInt(cleanCNPJ.charAt(i)) * weights2[i];
+  }
+  remainder = sum % 11;
+  const digit2 = remainder < 2 ? 0 : 11 - remainder;
+  if (digit2 !== parseInt(cleanCNPJ.charAt(13))) return false;
+
+  return true;
+};
+
+export const useTCPClientPage = () => {
+  const { token, user } = useAuth();
+
+  const [host, setHost] = useState("192.168.1.104");
+  const [port, setPort] = useState("5000");
+  const [nameSearchTerm, setNameSearchTerm] = useState(""); // Para name e exactName
+  const [documentSearchTerm, setDocumentSearchTerm] = useState(""); // Para cpf e cnpj
+  const [queryType, setQueryType] = useState<QueryType>("name");
+  const [queries, setQueries] = useState<QueryState[]>([]);
+  const [batchQueries, setBatchQueries] = useState<BatchQueryState[]>([]);
+  const requestCounterRef = useRef(0);
+  const progressIntervalsRef = useRef<Record<string, number>>({});
+
+  // Novos estados para requisições em lote
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchSize, setBatchSize] = useState(10);
+  const [batchTerms, setBatchTerms] = useState<string[]>([]);
+  const [batchTermsInput, setBatchTermsInput] = useState("");
+
+  // Novo estado para controlar se usamos workers ou não
+  const [useWorkers, setUseWorkers] = useState(true);
+  // Referência ao WorkerManager
+  const workerManagerRef = useRef<WorkerManager | null>(null);
+
+  // Inicializa o WorkerManager
+  useEffect(() => {
+    workerManagerRef.current = new WorkerManager(useWorkers);
+
+    // Limpeza quando o componente é desmontado
+    return () => {
+      if (workerManagerRef.current) {
+        workerManagerRef.current.cancelAllQueries();
+        workerManagerRef.current = null;
+      }
+
+      Object.values(progressIntervalsRef.current).forEach((intervalId) => {
+        window.clearInterval(intervalId);
+      });
+    };
+  }, [useWorkers]);
+
+  // Atualiza o WorkerManager quando a opção de useWorkers muda
+  useEffect(() => {
+    if (workerManagerRef.current) {
+      workerManagerRef.current.useWorkers = useWorkers;
+    }
+  }, [useWorkers]);
+
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter") {
+      handleQuery();
+    }
+  };
+
+  // Função para obter o termo de busca correto baseado no tipo
+  const getCurrentSearchTerm = () => {
+    if (queryType === "name" || queryType === "exactName") {
+      return nameSearchTerm;
+    } else {
+      return documentSearchTerm;
+    }
+  };
+
+  // Função para definir o termo de busca correto baseado no tipo
+  const setCurrentSearchTerm = (value: string) => {
+    if (queryType === "name" || queryType === "exactName") {
+      setNameSearchTerm(value);
+    } else {
+      setDocumentSearchTerm(value);
+    }
+  };
+
+  const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Remove mask characters if it's a CPF or CNPJ input
+    const cleanValue =
+      queryType === "cpf" || queryType === "cnpj"
+        ? value.replace(/\D/g, "")
+        : value;
+    setCurrentSearchTerm(cleanValue);
+  };
+
+  // Validação do termo de busca
+  const validateSearchTerm = (
+    term: string,
+    type: QueryType
+  ): { isValid: boolean; message: string } => {
+    if (!term.trim()) {
+      return { isValid: false, message: "Por favor, digite um termo de busca" };
+    }
+
+    if (type === "cpf") {
+      if (!validateCPF(term)) {
+        return { isValid: false, message: "CPF inválido" };
+      }
+    }
+    // CNPJ validation disabled - always valid
+    // else if (type === "cnpj") {
+    //   if (!validateCNPJ(term)) {
+    //     return { isValid: false, message: "CNPJ inválido" };
+    //   }
+    // }
+
+    return { isValid: true, message: "" };
+  };
+
+  // Função para buscar CNPJ por CPF
+  const handleCNPJByCPF = (cpf: string) => {
+    console.log("Buscando CNPJ por CPF:", cpf);
+    // TODO: Implementar quando tiver a URL da API
+    alert(
+      `Funcionalidade de buscar CNPJ por CPF será implementada em breve.\nCPF: ${cpf}`
+    );
+  };
+
+  // Função específica para consulta CNPJ
+  const performCNPJQuery = (query: QueryState) => {
+    console.log("Realizando consulta CNPJ:", query.searchTerm);
+
+    // Atualiza o status inicial
+    setQueries((prev) =>
+      prev.map((q) =>
+        q.id === query.id
+          ? { ...q, statusMessage: "Iniciando consulta CNPJ...", progress: 0 }
+          : q
+      )
+    );
+
+    // Simular progresso para CNPJ (por enquanto)
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 20;
+
+      setQueries((prev) =>
+        prev.map((q) =>
+          q.id === query.id
+            ? {
+                ...q,
+                progress,
+                statusMessage: `Consultando CNPJ... (${progress}%)`,
+                status: progress >= 100 ? "completed" : "pending",
+              }
+            : q
+        )
+      );
+
+      if (progress >= 100) {
+        clearInterval(interval);
+        // TODO: Implementar resultado real quando tiver a API
+        setQueries((prev) =>
+          prev.map((q) =>
+            q.id === query.id
+              ? {
+                  ...q,
+                  results: [], // Por enquanto array vazio
+                  status: "completed",
+                  progress: 100,
+                  statusMessage:
+                    "Consulta CNPJ concluída (funcionalidade será implementada)",
+                }
+              : q
+          )
+        );
+      }
+    }, 500);
+  };
+
+  // Função para processar atualizações de progresso do servidor
+  const handleProgressUpdate =
+    (queryId: string) => (update: ProgressUpdate) => {
+      setQueries((prev) =>
+        prev.map((q) => {
+          if (q.id === queryId) {
+            return {
+              ...q,
+              progress: update.progress,
+              statusMessage:
+                update.message || `${update.status} (${update.progress}%)`,
+              status: update.isComplete ? "completed" : "pending",
+              results: update.results || q.results,
+            };
+          }
+          return q;
+        })
+      );
+
+      // Se o progresso chegou a 100% e temos resultados, podemos limpar qualquer intervalo de progresso
+      if (update.isComplete && update.progress === 100) {
+        if (progressIntervalsRef.current[queryId]) {
+          clearInterval(progressIntervalsRef.current[queryId]);
+          delete progressIntervalsRef.current[queryId];
+        }
+      }
+    };
+
+  // Função para processar atualizações de progresso das requisições em lote
+  const handleBatchProgressUpdate =
+    (batchId: string) => (update: BatchProgressUpdate) => {
+      console.log(`Recebida atualização de lote ${batchId}:`, update);
+
+      setBatchQueries((prev) =>
+        prev.map((batch) => {
+          if (batch.id === batchId) {
+            return {
+              ...batch,
+              completed: update.completed,
+              total: update.total,
+              progress: update.progress,
+              results: update.results,
+              status: update.isComplete ? "completed" : "pending",
+              statusMessage: `Processadas ${update.completed}/${
+                update.total
+              } requisições (${Math.round(update.progress)}%)`,
+            };
+          }
+          return batch;
+        })
+      );
+    };
+
+  // Função para executar consulta usando o WorkerManager (substitui performQuery)
+  const performQueryWithWorkerManager = (query: QueryState) => {
+    if (!workerManagerRef.current) {
+      console.error("WorkerManager não inicializado");
+      return;
+    }
+
+    // Atualiza o status inicial
+    setQueries((prev) =>
+      prev.map((q) =>
+        q.id === query.id
+          ? { ...q, statusMessage: "Iniciando consulta...", progress: 0 }
+          : q
+      )
+    );
+
+    // Configurar as callbacks
+    const callbacks = {
+      onProgress: handleProgressUpdate(query.id),
+      onComplete: (results: QueryResult[]) => {
+        setQueries((prev) =>
+          prev.map((q) =>
+            q.id === query.id
+              ? {
+                  ...q,
+                  results,
+                  status: "completed",
+                  progress: 100,
+                  statusMessage: "Consulta concluída com sucesso",
+                }
+              : q
+          )
+        );
+      },
+      onError: (errorMessage: string) => {
+        console.error(
+          `[#${query.requestNumber}] Erro na consulta:`,
+          errorMessage
+        );
+
+        setQueries((prev) =>
+          prev.map((q) =>
+            q.id === query.id
+              ? {
+                  ...q,
+                  error: errorMessage,
+                  status: "error",
+                  statusMessage: "Erro na consulta após múltiplas tentativas",
+                }
+              : q
+          )
+        );
+      },
+    };
+
+    // Executar a consulta usando o WorkerManager com token
+    workerManagerRef.current.executeQuery(
+      {
+        host,
+        port: parseInt(port),
+        searchTerm: query.searchTerm,
+        queryType: query.queryType,
+        queryId: query.id,
+        requestNumber: query.requestNumber,
+        useProgressWorker:
+          query.queryType === "cpf" || query.queryType === "cnpj", // Usar progressWorker para CPF e CNPJ
+        token: token || undefined, // Adicionar o token aqui
+      },
+      callbacks
+    );
+  };
+
+  const handleQuery = () => {
+    const currentSearchTerm = getCurrentSearchTerm();
+    const validation = validateSearchTerm(currentSearchTerm, queryType);
+
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
+    const newQuery: QueryState = {
+      id: Date.now().toString(),
+      searchTerm: currentSearchTerm,
+      queryType,
+      results: null,
+      error: null,
+      progress: 0,
+      status: "pending",
+      startTime: Date.now(),
+      requestNumber: ++requestCounterRef.current,
+      retryCount: 0,
+      statusMessage: "Iniciando...",
+    };
+
+    setQueries((prev) => [newQuery, ...prev]);
+
+    // Para CNPJ, usar função específica temporária
+    if (queryType === "cnpj") {
+      performCNPJQuery(newQuery);
+    } else {
+      performQueryWithWorkerManager(newQuery);
+    }
+  };
+
+  const clearResults = () => {
+    setQueries([]);
+    setBatchQueries([]);
+  };
+
+  return {
+    // State
+    host,
+    setHost,
+    port,
+    setPort,
+    nameSearchTerm,
+    setNameSearchTerm,
+    documentSearchTerm,
+    setDocumentSearchTerm,
+    queryType,
+    setQueryType,
+    queries,
+    batchQueries,
+    batchMode,
+    setBatchMode,
+    batchSize,
+    setBatchSize,
+    batchTerms,
+    setBatchTerms,
+    batchTermsInput,
+    setBatchTermsInput,
+    useWorkers,
+    setUseWorkers,
+    user,
+    token,
+
+    // Functions
+    handleQuery,
+    clearResults,
+    handleKeyPress,
+    handleSearchTermChange,
+    handleCNPJByCPF,
+    validateSearchTerm,
+    getCurrentSearchTerm,
+  };
+};

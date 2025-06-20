@@ -1,7 +1,7 @@
 // filepath: c:\subDesktop\Unipampa\2025\Redes\FrontClientServer-multithread\src\services\WorkerManager.ts
 import { TCPClient, QueryResult, ProgressUpdate } from "./TCPClient";
 
-export type QueryType = "name" | "exactName" | "cpf";
+export type QueryType = "name" | "exactName" | "cpf" | "cnpj";
 
 interface QueryWorkerOptions {
   host: string;
@@ -11,6 +11,7 @@ interface QueryWorkerOptions {
   queryId: string;
   requestNumber: number;
   useProgressWorker?: boolean;
+  token?: string;
 }
 
 interface ProgressResponse {
@@ -275,7 +276,7 @@ export class WorkerManager {
     options: QueryWorkerOptions,
     wrappedCallbacks: any
   ): Promise<void> {
-    const { host, port, searchTerm, queryType, queryId, requestNumber } =
+    const { host, port, searchTerm, queryType, queryId, requestNumber, token } =
       options;
     if (!wrappedCallbacks) return; // Sem callbacks registrados
 
@@ -294,10 +295,10 @@ export class WorkerManager {
       // Execução da consulta de acordo com o tipo
       switch (queryType) {
         case "name":
-          results = await client.getPersonByName(searchTerm);
+          results = await client.getPersonByName(searchTerm, token);
           break;
         case "exactName":
-          results = await client.getPersonByExactName(searchTerm);
+          results = await client.getPersonByExactName(searchTerm, token);
           break;
         case "cpf":
           // Para CPF, simulamos o progresso manualmente pois não tem streaming
@@ -326,7 +327,7 @@ export class WorkerManager {
           }
 
           // Executar a consulta
-          results = await client.getPersonByCPF(searchTerm);
+          results = await client.getPersonByCPF(searchTerm, token);
 
           // Limpar o intervalo se existir
           if (intervalId) {

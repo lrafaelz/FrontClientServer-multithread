@@ -5,6 +5,29 @@ export interface QueryResult {
   nasc: string;
 }
 
+export interface CNPJResult {
+  cnpj: string;
+  razao_social: string;
+  nome_fantasia?: string;
+  situacao: string;
+  data_situacao: string;
+  motivo_situacao?: string;
+  cidade: string;
+  uf: string;
+  telefone?: string;
+  email?: string;
+  atividade_principal: string;
+  capital_social?: string;
+  porte?: string;
+  natureza_juridica?: string;
+}
+
+export interface CNPJByCPFResult {
+  cpf: string;
+  nome: string;
+  empresas: CNPJResult[];
+}
+
 // Interface para representar as atualizações de progresso do servidor
 export interface ProgressUpdate {
   status: string;
@@ -67,11 +90,33 @@ export class TCPClient {
     return justNumbers;
   }
 
-  private getHeaders(): HeadersInit {
-    return {
+  private formatCNPJ(cnpj: string): string {
+    // Remove todos os caracteres não numéricos
+    const cleaned = cnpj.replace(/\D/g, "");
+
+    // Remove caracteres especiais que possam ter sido adicionados
+    const justNumbers = cleaned.replace(/[^0-9]/g, "").substring(0, 14);
+
+    // Verifica se tem 14 dígitos
+    if (justNumbers.length !== 14) {
+      throw new Error("CNPJ deve conter 14 dígitos");
+    }
+
+    return justNumbers;
+  }
+
+  private getHeaders(token?: string): HeadersInit {
+    const headers: HeadersInit = {
       "Content-Type": "application/json",
       Accept: "application/json",
     };
+
+    // Add authentication token if provided
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return headers;
   }
 
   // Método para esperar um tempo específico
@@ -80,7 +125,10 @@ export class TCPClient {
   }
 
   // Método para processar respostas em streaming do servidor
-  private async makeStreamRequest(path: string): Promise<QueryResult[]> {
+  private async makeStreamRequest(
+    path: string,
+    token?: string
+  ): Promise<QueryResult[]> {
     // Usa o número da requisição que veio do App
     const requestId = this.requestNumber;
     let retryCount = 0;
@@ -112,7 +160,7 @@ export class TCPClient {
         // Fazemos fetch em modo streaming com tratamento de erro melhorado
         const response = await fetch(url, {
           method: "GET",
-          headers: this.getHeaders(),
+          headers: this.getHeaders(token),
           signal: controller.signal,
           // Desabilitar cache para evitar problemas com requisições pendentes
           cache: "no-store",
@@ -296,7 +344,7 @@ export class TCPClient {
   }
 
   // Método para requisições normais (não streaming)
-  private async makeRequest(path: string): Promise<any> {
+  private async makeRequest(path: string, token?: string): Promise<any> {
     // Usa o número da requisição que veio do App
     const requestId = this.requestNumber;
     let retryCount = 0;
@@ -319,7 +367,7 @@ export class TCPClient {
         // Browser fetch options - no need for NODE_TLS_REJECT_UNAUTHORIZED in browser
         const fetchOptions: RequestInit = {
           method: "GET",
-          headers: this.getHeaders(),
+          headers: this.getHeaders(token),
           signal: controller.signal,
         };
 
@@ -385,21 +433,26 @@ export class TCPClient {
     throw lastError || new Error("Falha após múltiplas tentativas");
   }
 
-  async getPersonByName(name: string): Promise<QueryResult[]> {
+  async getPersonByName(name: string, token?: string): Promise<QueryResult[]> {
     // Usando o método de streaming para as buscas por nome
     return await this.makeStreamRequest(
-      `/get-person-by-name/${encodeURIComponent(name)}`
+      `/get-person-by-name/${encodeURIComponent(name)}`,
+      token
     );
   }
 
-  async getPersonByExactName(name: string): Promise<QueryResult[]> {
+  async getPersonByExactName(
+    name: string,
+    token?: string
+  ): Promise<QueryResult[]> {
     // Usando o método de streaming para as buscas por nome exato
     return await this.makeStreamRequest(
-      `/get-person-by-exact-name/${encodeURIComponent(name)}`
+      `/get-person-by-exact-name/${encodeURIComponent(name)}`,
+      token
     );
   }
 
-  async getPersonByCPF(cpf: string): Promise<QueryResult[]> {
+  async getPersonByCPF(cpf: string, token?: string): Promise<QueryResult[]> {
     try {
       const formattedCPF = this.formatCPF(cpf);
       console.log(`Formatando CPF: "${cpf}" -> "${formattedCPF}"`);
@@ -407,7 +460,10 @@ export class TCPClient {
       // Garantindo que não há caracteres especiais na URL
       const sanitizedCPF = formattedCPF.trim();
       // CPF continua usando o método normal por enquanto
-      const data = await this.makeRequest(`/get-person-by-cpf/${sanitizedCPF}`);
+      const data = await this.makeRequest(
+        `/get-person-by-cpf/${sanitizedCPF}`,
+        token
+      );
       return data.results;
     } catch (error) {
       console.error(`[${this.requestNumber}] Erro ao buscar por CPF:`, error);
@@ -417,7 +473,7 @@ export class TCPClient {
 
   // Método para executar múltiplas requisições em sequência
   async batchQuery(
-    queryType: "name" | "exactName" | "cpf",
+    queryType: "name" | "exactName" | "cpf" | "cnpj",
     searchTerms: string[],
     requestsCount: number
   ): Promise<QueryResult[]> {
