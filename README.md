@@ -92,3 +92,4 @@ Os seguintes parâmetros podem ser configurados na interface do aplicativo:
 - Porta do servidor
 - Tipo de consulta (nome parcial, nome exato, CPF)
 
+ 
