@@ -8,16 +8,6 @@ export default defineConfig({
     port: 3000,
     // Removido o proxy para evitar problemas com CORS
   },
-  worker: {
-    // formato 'es' ou 'iife' para o bundle do worker
-    format: "es",
-    // outras opções de Rollup para worker, se precisar
-    rollupOptions: {
-      output: {
-        entryFileNames: "workers/[name].js",
-      },
-    },
-  },
   build: {
     outDir: "dist",
     emptyOutDir: true,

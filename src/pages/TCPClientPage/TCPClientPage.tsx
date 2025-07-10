@@ -14,7 +14,6 @@ import {
   AccordionSummary,
   AccordionDetails,
   CircularProgress,
-  Switch,
   LinearProgress,
   Paper,
 } from "@mui/material";
@@ -49,8 +48,6 @@ function TCPClientPage() {
     setQueryType,
     queries,
     batchQueries,
-    useWorkers,
-    setUseWorkers,
     user,
     token,
     handleQuery,
@@ -175,16 +172,6 @@ function TCPClientPage() {
             >
               Limpar Resultados
             </Button>
-
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={useWorkers}
-                  onChange={(e) => setUseWorkers(e.target.checked)}
-                />
-              }
-              label="Usar Workers"
-            />
           </Box>
         </Paper>
 

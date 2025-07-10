@@ -8,7 +8,7 @@ Este é um sistema cliente-servidor para consulta de CPFs, desenvolvido como par
 - Consulta de CPF por nome exato
 - Consulta de CPF por número do CPF
 - Requisições em lote através de arquivo ou lista de termos
-- Processamento paralelo com Web Workers
+- Processamento paralelo de consultas
 - Interface desktop moderna com Material-UI
 - Tratamento de erros e reconexões
 
@@ -18,7 +18,6 @@ Este é um sistema cliente-servidor para consulta de CPFs, desenvolvido como par
 - TypeScript
 - React
 - Material-UI
-- Web Workers (para processamento paralelo)
 - Vite (bundler)
 
 ## Pré-requisitos
@@ -64,10 +63,7 @@ npm run electron:build
 │   ├── main.tsx          # Ponto de entrada React
 │   ├── services/
 │   │   ├── TCPClient.ts  # Cliente HTTP com suporte a streaming
-│   │   └── WorkerManager.ts # Gerenciador de Web Workers
-│   └── workers/
-│       ├── queryWorker.ts     # Worker para processamento de consultas
-│       └── progressWorker.ts  # Worker para atualização de progresso
+│   │   └── WorkerManager.ts # Gerenciador de consultas paralelas
 ├── ssl/                  # Certificados SSL para conexões seguras
 │   ├── cert.pem
 │   └── key.pem
@@ -77,7 +73,7 @@ npm run electron:build
 ## Recursos Avançados
 
 ### Consultas Paralelas
-O sistema utiliza Web Workers para executar consultas em paralelo, permitindo um melhor aproveitamento dos recursos do sistema e mantendo a interface responsiva durante operações intensivas.
+O sistema executa consultas em paralelo através de um gerenciador de conexões, permitindo um melhor aproveitamento dos recursos do sistema e mantendo a interface responsiva durante operações intensivas.
 
 ### Requisições em Lote
 É possível executar múltiplas consultas em lote, através de:
@@ -95,5 +91,4 @@ Os seguintes parâmetros podem ser configurados na interface do aplicativo:
 - Host do servidor
 - Porta do servidor
 - Tipo de consulta (nome parcial, nome exato, CPF)
-- Uso de Web Workers para processamento paralelo
 

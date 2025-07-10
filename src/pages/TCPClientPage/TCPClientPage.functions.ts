@@ -122,14 +122,12 @@ export const useTCPClientPage = () => {
   const [batchTerms, setBatchTerms] = useState<string[]>([]);
   const [batchTermsInput, setBatchTermsInput] = useState("");
 
-  // Novo estado para controlar se usamos workers ou não
-  const [useWorkers, setUseWorkers] = useState(false);
   // Referência ao WorkerManager
   const workerManagerRef = useRef<WorkerManager | null>(null);
 
   // Inicializa o WorkerManager
   useEffect(() => {
-    workerManagerRef.current = new WorkerManager(useWorkers);
+    workerManagerRef.current = new WorkerManager();
 
     // Limpeza quando o componente é desmontado
     return () => {
@@ -145,14 +143,7 @@ export const useTCPClientPage = () => {
       // Limpar requisições pendentes
       pendingQueriesRef.current.clear();
     };
-  }, [useWorkers]);
-
-  // Atualiza o WorkerManager quando a opção de useWorkers muda
-  useEffect(() => {
-    if (workerManagerRef.current) {
-      workerManagerRef.current.useWorkers = useWorkers;
-    }
-  }, [useWorkers]);
+  }, []);
 
   const handleKeyPress = (event: React.KeyboardEvent) => {
     if (event.key === "Enter") {
@@ -435,8 +426,6 @@ export const useTCPClientPage = () => {
         queryType: query.queryType,
         queryId: query.id,
         requestNumber: query.requestNumber,
-        useProgressWorker:
-          query.queryType === "cpf" || query.queryType === "cnpj", // Usar progressWorker para CPF e CNPJ
         token: token || undefined, // Adicionar o token aqui
       },
       callbacks
@@ -517,8 +506,6 @@ export const useTCPClientPage = () => {
     setBatchTerms,
     batchTermsInput,
     setBatchTermsInput,
-    useWorkers,
-    setUseWorkers,
     user,
     token,
 
