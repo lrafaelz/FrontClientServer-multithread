@@ -1,10 +1,10 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './contexts/AuthContext';
-import LoginPage from './pages/LoginPage';
-import TCPClientPage from './pages/TCPClientPage';
-import ProtectedRoute from './components/ProtectedRoute';
-import { Box, CircularProgress } from '@mui/material';
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./contexts/AuthContext";
+import LoginPage from "./pages/LoginPage";
+import TCPClientPage from "./pages/TCPClientPage";
+import ProtectedRoute from "./components/ProtectedRoute";
+import { Box, CircularProgress } from "@mui/material";
 
 function App() {
   const { isLoading } = useAuth();
@@ -14,10 +14,10 @@ function App() {
     return (
       <Box
         sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100vh',
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
         }}
       >
         <CircularProgress size={40} />
@@ -51,4 +51,3 @@ function App() {
 }
 
 export default App;
-

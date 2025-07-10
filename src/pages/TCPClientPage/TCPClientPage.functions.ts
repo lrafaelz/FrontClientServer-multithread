@@ -101,10 +101,7 @@ export const validateCNPJ = (cnpj: string): boolean => {
 };
 
 export const useTCPClientPage = () => {
-  const { token, user } = useAuth();
-
-  const [host, setHost] = useState("127.0.0.1");
-  const [port, setPort] = useState("5000");
+  const { token, user, connectionConfig, updateConnectionConfig } = useAuth();
   const [nameSearchTerm, setNameSearchTerm] = useState(""); // Para name e exactName
   const [documentSearchTerm, setDocumentSearchTerm] = useState(""); // Para cpf e cnpj
   const [queryType, setQueryType] = useState<QueryType>("name");
@@ -215,7 +212,7 @@ export const useTCPClientPage = () => {
     console.log("Realizando consulta CNPJ:", query.searchTerm);
 
     // Criar chave para remover da lista de pendentes
-    const queryKey = `${query.queryType}:${query.searchTerm}:${host}:${port}`;
+    const queryKey = `${query.queryType}:${query.searchTerm}:${connectionConfig.host}:${connectionConfig.port}`;
 
     // Atualiza o status inicial
     setQueries((prev) =>
@@ -357,7 +354,7 @@ export const useTCPClientPage = () => {
     );
 
     // Criar chave para remover da lista de pendentes
-    const queryKey = `${query.queryType}:${query.searchTerm}:${host}:${port}`;
+    const queryKey = `${query.queryType}:${query.searchTerm}:${connectionConfig.host}:${connectionConfig.port}`;
 
     // Configurar as callbacks
     const callbacks = {
@@ -420,8 +417,8 @@ export const useTCPClientPage = () => {
     // Executar a consulta usando o WorkerManager com token
     workerManagerRef.current.executeQuery(
       {
-        host,
-        port: parseInt(port),
+        host: connectionConfig.host,
+        port: parseInt(connectionConfig.port),
         searchTerm: query.searchTerm,
         queryType: query.queryType,
         queryId: query.id,
@@ -442,7 +439,7 @@ export const useTCPClientPage = () => {
     }
 
     // Criar uma chave única para identificar a requisição
-    const queryKey = `${queryType}:${currentSearchTerm}:${host}:${port}`;
+    const queryKey = `${queryType}:${currentSearchTerm}:${connectionConfig.host}:${connectionConfig.port}`;
 
     // Verificar se já existe uma requisição em andamento com os mesmos parâmetros
     if (pendingQueriesRef.current.has(queryKey)) {
@@ -486,10 +483,8 @@ export const useTCPClientPage = () => {
 
   return {
     // State
-    host,
-    setHost,
-    port,
-    setPort,
+    connectionConfig,
+    updateConnectionConfig,
     nameSearchTerm,
     setNameSearchTerm,
     documentSearchTerm,

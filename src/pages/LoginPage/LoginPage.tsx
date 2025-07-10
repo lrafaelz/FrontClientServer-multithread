@@ -8,12 +8,15 @@ import {
   CircularProgress,
   InputAdornment,
   IconButton,
+  Divider,
 } from "@mui/material";
 import {
   Email as EmailIcon,
   Lock as LockIcon,
   Visibility,
   VisibilityOff,
+  Computer as ComputerIcon,
+  Router as RouterIcon,
 } from "@mui/icons-material";
 import { useLoginPage } from "./LoginPage.functions";
 import {
@@ -25,7 +28,6 @@ import {
   titleTypographyStyles,
   subtitleTypographyStyles,
   formBoxStyles,
-  credentialsBoxStyles,
   cardContentStyles,
 } from "./LoginPage.styles";
 
@@ -65,10 +67,16 @@ const LoginPage: React.FC = () => {
     setEmail,
     password,
     setPassword,
+    host,
+    setHost,
+    port,
+    setPort,
     showPassword,
     error,
     emailError,
     passwordError,
+    hostError,
+    portError,
     isLoading,
     handleSubmit,
     handleClickShowPassword,
@@ -101,6 +109,45 @@ const LoginPage: React.FC = () => {
           )}
 
           <Box component="form" onSubmit={handleSubmit} sx={formBoxStyles}>
+            <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mt: 1 }}>
+              <Box sx={{ flex: 1, minWidth: "200px" }}>
+                <TextField
+                  fullWidth
+                  label="Host"
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  error={!!hostError}
+                  helperText={hostError}
+                  margin="normal"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <ComputerIcon color={hostError ? "error" : "action"} />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: "200px" }}>
+                <TextField
+                  fullWidth
+                  label="Porta"
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                  error={!!portError}
+                  helperText={portError}
+                  margin="normal"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <RouterIcon color={portError ? "error" : "action"} />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Box>
+            </Box>
+            <Divider />
             <TextField
               margin="normal"
               required
@@ -155,7 +202,6 @@ const LoginPage: React.FC = () => {
                 ),
               }}
             />
-
             <StyledButton
               type="submit"
               fullWidth
@@ -168,23 +214,6 @@ const LoginPage: React.FC = () => {
                 "Entrar"
               )}
             </StyledButton>
-
-            <Box sx={credentialsBoxStyles}>
-              <Typography variant="body2" color="text.secondary" align="center">
-                Credenciais de teste:
-              </Typography>
-              <Typography
-                variant="caption"
-                display="block"
-                align="center"
-                sx={{ mt: 1 }}
-              >
-                Admin: admin@capivara.com / capivara123
-              </Typography>
-              <Typography variant="caption" display="block" align="center">
-                Usuário: user@capivara.com / user123
-              </Typography>
-            </Box>
           </Box>
         </CardContent>
       </StyledCard>

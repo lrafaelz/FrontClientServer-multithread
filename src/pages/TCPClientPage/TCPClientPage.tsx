@@ -38,10 +38,6 @@ import {
 
 function TCPClientPage() {
   const {
-    host,
-    setHost,
-    port,
-    setPort,
     nameSearchTerm,
     documentSearchTerm,
     queryType,
@@ -50,6 +46,8 @@ function TCPClientPage() {
     batchQueries,
     user,
     token,
+    connectionConfig,
+    updateConnectionConfig,
     handleQuery,
     clearResults,
     handleKeyPress,
@@ -80,8 +78,10 @@ function TCPClientPage() {
               <TextField
                 fullWidth
                 label="Host"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
+                value={connectionConfig.host}
+                onChange={(e) =>
+                  updateConnectionConfig(e.target.value, connectionConfig.port)
+                }
                 margin="normal"
               />
             </Box>
@@ -89,8 +89,10 @@ function TCPClientPage() {
               <TextField
                 fullWidth
                 label="Porta"
-                value={port}
-                onChange={(e) => setPort(e.target.value)}
+                value={connectionConfig.port}
+                onChange={(e) =>
+                  updateConnectionConfig(connectionConfig.host, e.target.value)
+                }
                 margin="normal"
               />
             </Box>

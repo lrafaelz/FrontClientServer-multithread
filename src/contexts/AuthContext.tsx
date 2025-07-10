@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
 
 interface User {
   id: string;
@@ -6,13 +12,25 @@ interface User {
   name: string;
 }
 
+interface ConnectionConfig {
+  host: string;
+  port: string;
+}
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  connectionConfig: ConnectionConfig;
+  login: (
+    email: string,
+    password: string,
+    host: string,
+    port: string
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isLoading: boolean;
+  updateConnectionConfig: (host: string, port: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,7 +38,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
@@ -32,114 +50,167 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [connectionConfig, setConnectionConfig] = useState<ConnectionConfig>({
+    host: "127.0.0.1",
+    port: "5000",
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   // Load auth state from localStorage on mount
   useEffect(() => {
-    const savedToken = localStorage.getItem('authToken');
-    const savedUser = localStorage.getItem('authUser');
-    
+    const savedToken = localStorage.getItem("authToken");
+    const savedUser = localStorage.getItem("authUser");
+    const savedConnectionConfig = localStorage.getItem("connectionConfig");
+
     if (savedToken && savedUser) {
       try {
         setToken(savedToken);
         setUser(JSON.parse(savedUser));
       } catch (error) {
-        console.error('Error parsing saved user data:', error);
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('authUser');
+        console.error("Error parsing saved user data:", error);
+        localStorage.removeItem("authToken");
+        localStorage.removeItem("authUser");
       }
     }
+
+    if (savedConnectionConfig) {
+      try {
+        setConnectionConfig(JSON.parse(savedConnectionConfig));
+      } catch (error) {
+        console.error("Error parsing saved connection config:", error);
+        localStorage.removeItem("connectionConfig");
+      }
+    }
+
     setIsLoading(false);
   }, []);
 
-  // Mock API call for login
-  const mockLoginAPI = async (email: string, password: string) => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Mock credentials validation
-    if (email === 'admin@capivara.com' && password === 'capivara123') {
-      return {
-        success: true,
-        data: {
-          token: 'mock-jwt-token-' + Date.now(),
-          user: {
-            id: '1',
-            email: email,
-            name: 'Administrador Capivara'
-          }
-        }
-      };
-    } else if (email === 'user@capivara.com' && password === 'user123') {
-      return {
-        success: true,
-        data: {
-          token: 'mock-jwt-token-user-' + Date.now(),
-          user: {
-            id: '2',
-            email: email,
-            name: 'Usuário Capivara'
-          }
-        }
-      };
-    } else {
+  const apiLogin = async (
+    username: string,
+    password: string,
+    host: string,
+    port: string
+  ) => {
+    try {
+      const baseUrl = `https://${host}:${port}`;
+      const response = await fetch(`${baseUrl}/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include", // Include cookies for session management
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return {
+          success: true,
+          data: {
+            message: data.message,
+            user: {
+              id: username, // Use username as ID since backend doesn't provide user details
+              email: username, // Use username as email for compatibility
+              name: username, // Use username as display name
+            },
+          },
+        };
+      } else {
+        return {
+          success: false,
+          error: data.message || "Erro de autenticação",
+        };
+      }
+    } catch (error) {
+      console.error("Login API error:", error);
       return {
         success: false,
-        error: 'Credenciais inválidas. Tente admin@capivara.com/capivara123 ou user@capivara.com/user123'
+        error:
+          "Erro de conexão com o servidor. Verifique se o host e porta estão corretos.",
       };
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (
+    email: string,
+    password: string,
+    host: string,
+    port: string
+  ) => {
     setIsLoading(true);
-    
+
     try {
-      const response = await mockLoginAPI(email, password);
-      
+      // Use email as username for the backend call
+      const response = await apiLogin(email, password, host, port);
+
       if (response.success && response.data) {
-        const { token: newToken, user: newUser } = response.data;
-        
-        setToken(newToken);
+        const { user: newUser } = response.data;
+
+        // Generate a session token for frontend use (since backend uses session cookies)
+        const sessionToken = `session-${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
+
+        setToken(sessionToken);
         setUser(newUser);
-        
+
+        // Update connection config
+        const newConnectionConfig = { host, port };
+        setConnectionConfig(newConnectionConfig);
+
         // Save to localStorage
-        localStorage.setItem('authToken', newToken);
-        localStorage.setItem('authUser', JSON.stringify(newUser));
-        
+        localStorage.setItem("authToken", sessionToken);
+        localStorage.setItem("authUser", JSON.stringify(newUser));
+        localStorage.setItem(
+          "connectionConfig",
+          JSON.stringify(newConnectionConfig)
+        );
+
         return { success: true };
       } else {
         return { success: false, error: response.error };
       }
     } catch (error) {
-      return { 
-        success: false, 
-        error: 'Erro de conexão. Tente novamente.' 
+      return {
+        success: false,
+        error: "Erro de conexão. Tente novamente.",
       };
     } finally {
       setIsLoading(false);
     }
   };
 
+  const updateConnectionConfig = (host: string, port: string) => {
+    const newConnectionConfig = { host, port };
+    setConnectionConfig(newConnectionConfig);
+    localStorage.setItem(
+      "connectionConfig",
+      JSON.stringify(newConnectionConfig)
+    );
+  };
+
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('authUser');
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("authUser");
+    // Keep connection config when logging out
   };
 
   const value: AuthContextType = {
     user,
     token,
     isAuthenticated: !!user && !!token,
+    connectionConfig,
     login,
     logout,
-    isLoading
+    isLoading,
+    updateConnectionConfig,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
-
