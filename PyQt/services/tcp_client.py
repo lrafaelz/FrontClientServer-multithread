@@ -129,7 +129,7 @@ class TCPClient:
                     headers=self._get_headers(),
                     timeout=self.timeout,
                     verify=False,  # Using our own cert but skipping verification
-                    # cert=self.cert_path  # Uncomment if server requires client certificates
+                    cert=self.cert_path  # Uncomment if server requires client certificates
                 )
                 
                 # Check for errors
@@ -192,7 +192,7 @@ class TCPClient:
                     )
                 )
                 session.mount('http://', adapter)
-                session.mount('https://', adapter)
+                session.mount('http://', adapter)
                 
                 # Initial timeout is shorter for connection, longer for reads
                 initial_timeout = (5.0, 90.0)  # (connect timeout, read timeout)
