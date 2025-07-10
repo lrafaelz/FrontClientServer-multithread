@@ -54,6 +54,11 @@ export class TCPClient {
   private maxRetries: number = 3; // Número máximo de tentativas
   private retryDelay: number = 1000; // Delay entre tentativas (ms)
   private timeout: number = 10000;
+  private preflightTimeout: number = 5000; // Timeout específico para preflight
+  private streamingTimeoutMultiplier: number = 3; // Multiplicador para streaming quando preflight OK
+  private requestTimeoutMultiplier: number = 2; // Multiplicador para requisições normais quando preflight OK
+  private optionsSuccessTimeout: number = 120000; // Timeout de 120s quando OPTIONS retorna 200
+  private optionsFailureTimeout: number = 60000; // Timeout de 60s quando OPTIONS falha ou não existe
   private onProgressUpdate?: (update: ProgressUpdate) => void;
   private onBatchProgressUpdate?: (update: BatchProgressUpdate) => void;
 
@@ -74,6 +79,35 @@ export class TCPClient {
     this.onProgressUpdate = onProgressUpdate;
     // Callback para atualizações de progresso em lote
     this.onBatchProgressUpdate = onBatchProgressUpdate;
+    
+    console.log(`[${requestNumber}] Cliente TCP criado com timeout dinâmico baseado em preflight`);
+  }
+
+  // Método público para ajustar os timeouts
+  public configureTimeouts({
+    preflightTimeout,
+    streamingMultiplier,
+    requestMultiplier,
+    optionsSuccessTimeout,
+    optionsFailureTimeout
+  }: {
+    preflightTimeout?: number;
+    streamingMultiplier?: number;
+    requestMultiplier?: number;
+    optionsSuccessTimeout?: number;
+    optionsFailureTimeout?: number;
+  }) {
+    if (preflightTimeout) this.preflightTimeout = preflightTimeout;
+    if (streamingMultiplier) this.streamingTimeoutMultiplier = streamingMultiplier;
+    if (requestMultiplier) this.requestTimeoutMultiplier = requestMultiplier;
+    if (optionsSuccessTimeout) this.optionsSuccessTimeout = optionsSuccessTimeout;
+    if (optionsFailureTimeout) this.optionsFailureTimeout = optionsFailureTimeout;
+    
+    console.log(
+      `[${this.requestNumber}] Timeouts configurados: preflight=${this.preflightTimeout}ms, ` +
+      `streaming=${this.streamingTimeoutMultiplier}x, request=${this.requestTimeoutMultiplier}x, ` +
+      `optionsSuccess=${this.optionsSuccessTimeout}ms, optionsFailure=${this.optionsFailureTimeout}ms`
+    );
   }
 
   private formatCPF(cpf: string): string {
@@ -125,6 +159,43 @@ export class TCPClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  // Método para verificar se o servidor está respondendo com preflight OPTIONS
+  private async checkPreflightConnection(path: string, token?: string): Promise<boolean> {
+    const requestId = this.requestNumber;
+    const url = `${this.baseUrl}${path}`;
+    
+    try {
+      console.log(`[${requestId}] Verificando conexão preflight para: ${url}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        console.log(`[${requestId}] Timeout na verificação preflight`);
+      }, this.preflightTimeout);
+
+      const response = await fetch(url, {
+        method: "OPTIONS",
+        headers: this.getHeaders(token),
+        signal: controller.signal,
+        mode: "cors",
+        credentials: "include",
+      });
+
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        console.log(`[${requestId}] Preflight OPTIONS bem-sucedido (${response.status})`);
+        return true;
+      } else {
+        console.log(`[${requestId}] Preflight OPTIONS falhou (${response.status})`);
+        return false;
+      }
+    } catch (error) {
+      console.log(`[${requestId}] Erro na verificação preflight:`, error);
+      return false;
+    }
+  }
+
   // Método para processar respostas em streaming do servidor
   private async makeStreamRequest(
     path: string,
@@ -134,6 +205,20 @@ export class TCPClient {
     const requestId = this.requestNumber;
     let retryCount = 0;
     let lastError: Error | null = null;
+
+    // Verificar se o servidor está respondendo com preflight OPTIONS
+    const preflightSuccess = await this.checkPreflightConnection(path, token);
+    
+    // Ajustar timeout baseado no sucesso do preflight
+    // Se OPTIONS = 200: usa timeout de 120s
+    // Se OPTIONS falha ou não existe: usa timeout de 60s
+    const dynamicTimeout = preflightSuccess 
+      ? this.optionsSuccessTimeout  // 120s quando OPTIONS retorna 200
+      : this.optionsFailureTimeout; // 60s quando OPTIONS falha
+    
+    console.log(
+      `[${requestId}] Preflight: ${preflightSuccess ? 'OK (200)' : 'FALHOU'} - Timeout: ${dynamicTimeout}ms`
+    );
 
     while (retryCount <= this.maxRetries) {
       try {
@@ -150,9 +235,9 @@ export class TCPClient {
         const timeoutId = setTimeout(() => {
           controller.abort();
           console.warn(
-            `[${requestId}] Tempo limite de ${this.timeout}ms atingido, abortando requisição.`
+            `[${requestId}] Tempo limite de ${dynamicTimeout}ms atingido, abortando requisição.`
           );
-        }, this.timeout);
+        }, dynamicTimeout);
 
         console.log(
           `[${requestId}] Iniciando requisição streaming para: ${url}`
@@ -355,6 +440,20 @@ export class TCPClient {
     let retryCount = 0;
     let lastError: Error | null = null;
 
+    // Verificar se o servidor está respondendo com preflight OPTIONS
+    const preflightSuccess = await this.checkPreflightConnection(path, token);
+    
+    // Ajustar timeout baseado no sucesso do preflight
+    // Se OPTIONS = 200: usa timeout de 120s
+    // Se OPTIONS falha ou não existe: usa timeout de 60s
+    const dynamicTimeout = preflightSuccess 
+      ? this.optionsSuccessTimeout  // 120s quando OPTIONS retorna 200
+      : this.optionsFailureTimeout; // 60s quando OPTIONS falha
+    
+    console.log(
+      `[${requestId}] Preflight: ${preflightSuccess ? 'OK (200)' : 'FALHOU'} - Timeout: ${dynamicTimeout}ms`
+    );
+
     while (retryCount <= this.maxRetries) {
       try {
         console.log(
@@ -367,7 +466,12 @@ export class TCPClient {
 
         // Usando fetch com AbortController para controlar timeout
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+          console.warn(
+            `[${requestId}] Tempo limite de ${dynamicTimeout}ms atingido, abortando requisição.`
+          );
+        }, dynamicTimeout);
 
         // Browser fetch options with better HTTPS support
         const fetchOptions: RequestInit = {
