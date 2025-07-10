@@ -47,6 +47,7 @@ export interface BatchProgressUpdate {
   isComplete: boolean;
 }
 
+// #############################################################################
 export class TCPClient {
   private baseUrl: string;
   private requestNumber: number;
@@ -164,6 +165,10 @@ export class TCPClient {
           signal: controller.signal,
           // Desabilitar cache para evitar problemas com requisições pendentes
           cache: "no-store",
+          // Set mode to cors for proper CORS handling
+          mode: "cors",
+          // Set credentials to include for CORS requests
+          credentials: "include",
         }).catch((err) => {
           clearTimeout(timeoutId);
           throw err;
@@ -364,11 +369,17 @@ export class TCPClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-        // Browser fetch options - no need for NODE_TLS_REJECT_UNAUTHORIZED in browser
+        // Browser fetch options with better HTTPS support
         const fetchOptions: RequestInit = {
           method: "GET",
           headers: this.getHeaders(token),
           signal: controller.signal,
+          // Disable cache for HTTPS requests
+          cache: "no-cache",
+          // Set mode to cors for proper CORS handling
+          mode: "cors",
+          // Set credentials to include for CORS requests
+          credentials: "include",
         };
 
         const response = await fetch(url, fetchOptions);

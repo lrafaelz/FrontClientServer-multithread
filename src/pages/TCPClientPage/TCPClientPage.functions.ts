@@ -103,7 +103,7 @@ export const validateCNPJ = (cnpj: string): boolean => {
 export const useTCPClientPage = () => {
   const { token, user } = useAuth();
 
-  const [host, setHost] = useState("192.168.1.104");
+  const [host, setHost] = useState("127.0.0.1");
   const [port, setPort] = useState("5000");
   const [nameSearchTerm, setNameSearchTerm] = useState(""); // Para name e exactName
   const [documentSearchTerm, setDocumentSearchTerm] = useState(""); // Para cpf e cnpj

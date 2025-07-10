@@ -87,3 +87,7 @@ $RECYCLE.BIN/
 .pnp.*
 *.tsbuildinfo
 .eslintcache
+
+# SSL
+server.crt
+server.key
