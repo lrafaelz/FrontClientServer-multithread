@@ -216,9 +216,7 @@ export const useTCPClientPage = () => {
   const handleCNPJByCPF = (cpf: string) => {
     console.log("Buscando CNPJ por CPF:", cpf);
     // TODO: Implementar quando tiver a URL da API
-    alert(
-      `Funcionalidade de buscar CNPJ por CPF será implementada em breve.\nCPF: ${cpf}`
-    );
+    alert(`CPF: ${cpf}`);
   };
 
   // Função específica para consulta CNPJ
