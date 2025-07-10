@@ -113,6 +113,9 @@ export const useTCPClientPage = () => {
   const requestCounterRef = useRef(0);
   const progressIntervalsRef = useRef<Record<string, number>>({});
 
+  // Ref para controlar requisições em andamento e evitar duplicações
+  const pendingQueriesRef = useRef<Set<string>>(new Set());
+
   // Novos estados para requisições em lote
   const [batchMode, setBatchMode] = useState(false);
   const [batchSize, setBatchSize] = useState(10);
@@ -120,7 +123,7 @@ export const useTCPClientPage = () => {
   const [batchTermsInput, setBatchTermsInput] = useState("");
 
   // Novo estado para controlar se usamos workers ou não
-  const [useWorkers, setUseWorkers] = useState(true);
+  const [useWorkers, setUseWorkers] = useState(false);
   // Referência ao WorkerManager
   const workerManagerRef = useRef<WorkerManager | null>(null);
 
@@ -138,6 +141,9 @@ export const useTCPClientPage = () => {
       Object.values(progressIntervalsRef.current).forEach((intervalId) => {
         window.clearInterval(intervalId);
       });
+
+      // Limpar requisições pendentes
+      pendingQueriesRef.current.clear();
     };
   }, [useWorkers]);
 
@@ -219,6 +225,9 @@ export const useTCPClientPage = () => {
   const performCNPJQuery = (query: QueryState) => {
     console.log("Realizando consulta CNPJ:", query.searchTerm);
 
+    // Criar chave para remover da lista de pendentes
+    const queryKey = `${query.queryType}:${query.searchTerm}:${host}:${port}`;
+
     // Atualiza o status inicial
     setQueries((prev) =>
       prev.map((q) =>
@@ -248,6 +257,9 @@ export const useTCPClientPage = () => {
 
       if (progress >= 100) {
         clearInterval(interval);
+        // Remover da lista de requisições pendentes
+        pendingQueriesRef.current.delete(queryKey);
+
         // TODO: Implementar resultado real quando tiver a API
         setQueries((prev) =>
           prev.map((q) =>
@@ -273,13 +285,32 @@ export const useTCPClientPage = () => {
       setQueries((prev) =>
         prev.map((q) => {
           if (q.id === queryId) {
+            // Verificar se a atualização contém resultados em formato direto
+            let processedResults = q.results;
+
+            if (update.results) {
+              // Se update.results é um array, usar diretamente
+              if (Array.isArray(update.results)) {
+                processedResults = update.results;
+              }
+              // Se update.results é um objeto com propriedade 'results', extrair o array
+              else if (
+                update.results &&
+                (update.results as any).results &&
+                Array.isArray((update.results as any).results)
+              ) {
+                processedResults = (update.results as any)
+                  .results as QueryResult[];
+              }
+            }
+
             return {
               ...q,
               progress: update.progress,
               statusMessage:
                 update.message || `${update.status} (${update.progress}%)`,
               status: update.isComplete ? "completed" : "pending",
-              results: update.results || q.results,
+              results: processedResults,
             };
           }
           return q;
@@ -336,16 +367,35 @@ export const useTCPClientPage = () => {
       )
     );
 
+    // Criar chave para remover da lista de pendentes
+    const queryKey = `${query.queryType}:${query.searchTerm}:${host}:${port}`;
+
     // Configurar as callbacks
     const callbacks = {
       onProgress: handleProgressUpdate(query.id),
-      onComplete: (results: QueryResult[]) => {
+      onComplete: (results: QueryResult[] | any) => {
+        // Remover da lista de requisições pendentes
+        pendingQueriesRef.current.delete(queryKey);
+
+        // Processar os resultados para garantir que temos o formato correto
+        let processedResults: QueryResult[] = [];
+
+        if (Array.isArray(results)) {
+          processedResults = results;
+        } else if (
+          results &&
+          results.results &&
+          Array.isArray(results.results)
+        ) {
+          processedResults = results.results;
+        }
+
         setQueries((prev) =>
           prev.map((q) =>
             q.id === query.id
               ? {
                   ...q,
-                  results,
+                  results: processedResults,
                   status: "completed",
                   progress: 100,
                   statusMessage: "Consulta concluída com sucesso",
@@ -355,6 +405,9 @@ export const useTCPClientPage = () => {
         );
       },
       onError: (errorMessage: string) => {
+        // Remover da lista de requisições pendentes
+        pendingQueriesRef.current.delete(queryKey);
+
         console.error(
           `[#${query.requestNumber}] Erro na consulta:`,
           errorMessage
@@ -401,6 +454,15 @@ export const useTCPClientPage = () => {
       return;
     }
 
+    // Criar uma chave única para identificar a requisição
+    const queryKey = `${queryType}:${currentSearchTerm}:${host}:${port}`;
+
+    // Verificar se já existe uma requisição em andamento com os mesmos parâmetros
+    if (pendingQueriesRef.current.has(queryKey)) {
+      console.log(`Requisição duplicada detectada e ignorada: ${queryKey}`);
+      return;
+    }
+
     const newQuery: QueryState = {
       id: Date.now().toString(),
       searchTerm: currentSearchTerm,
@@ -415,6 +477,9 @@ export const useTCPClientPage = () => {
       statusMessage: "Iniciando...",
     };
 
+    // Adicionar à lista de requisições pendentes
+    pendingQueriesRef.current.add(queryKey);
+
     setQueries((prev) => [newQuery, ...prev]);
 
     // Para CNPJ, usar função específica temporária
@@ -428,6 +493,8 @@ export const useTCPClientPage = () => {
   const clearResults = () => {
     setQueries([]);
     setBatchQueries([]);
+    // Limpar requisições pendentes
+    pendingQueriesRef.current.clear();
   };
 
   return {

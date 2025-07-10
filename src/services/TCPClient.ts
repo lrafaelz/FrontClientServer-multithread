@@ -79,8 +79,10 @@ export class TCPClient {
     this.onProgressUpdate = onProgressUpdate;
     // Callback para atualizações de progresso em lote
     this.onBatchProgressUpdate = onBatchProgressUpdate;
-    
-    console.log(`[${requestNumber}] Cliente TCP criado com timeout dinâmico baseado em preflight`);
+
+    console.log(
+      `[${requestNumber}] Cliente TCP criado com timeout dinâmico baseado em preflight`
+    );
   }
 
   // Método público para ajustar os timeouts
@@ -89,7 +91,7 @@ export class TCPClient {
     streamingMultiplier,
     requestMultiplier,
     optionsSuccessTimeout,
-    optionsFailureTimeout
+    optionsFailureTimeout,
   }: {
     preflightTimeout?: number;
     streamingMultiplier?: number;
@@ -98,15 +100,18 @@ export class TCPClient {
     optionsFailureTimeout?: number;
   }) {
     if (preflightTimeout) this.preflightTimeout = preflightTimeout;
-    if (streamingMultiplier) this.streamingTimeoutMultiplier = streamingMultiplier;
+    if (streamingMultiplier)
+      this.streamingTimeoutMultiplier = streamingMultiplier;
     if (requestMultiplier) this.requestTimeoutMultiplier = requestMultiplier;
-    if (optionsSuccessTimeout) this.optionsSuccessTimeout = optionsSuccessTimeout;
-    if (optionsFailureTimeout) this.optionsFailureTimeout = optionsFailureTimeout;
-    
+    if (optionsSuccessTimeout)
+      this.optionsSuccessTimeout = optionsSuccessTimeout;
+    if (optionsFailureTimeout)
+      this.optionsFailureTimeout = optionsFailureTimeout;
+
     console.log(
       `[${this.requestNumber}] Timeouts configurados: preflight=${this.preflightTimeout}ms, ` +
-      `streaming=${this.streamingTimeoutMultiplier}x, request=${this.requestTimeoutMultiplier}x, ` +
-      `optionsSuccess=${this.optionsSuccessTimeout}ms, optionsFailure=${this.optionsFailureTimeout}ms`
+        `streaming=${this.streamingTimeoutMultiplier}x, request=${this.requestTimeoutMultiplier}x, ` +
+        `optionsSuccess=${this.optionsSuccessTimeout}ms, optionsFailure=${this.optionsFailureTimeout}ms`
     );
   }
 
@@ -160,13 +165,16 @@ export class TCPClient {
   }
 
   // Método para verificar se o servidor está respondendo com preflight OPTIONS
-  private async checkPreflightConnection(path: string, token?: string): Promise<boolean> {
+  private async checkPreflightConnection(
+    path: string,
+    token?: string
+  ): Promise<boolean> {
     const requestId = this.requestNumber;
     const url = `${this.baseUrl}${path}`;
-    
+
     try {
       console.log(`[${requestId}] Verificando conexão preflight para: ${url}`);
-      
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         controller.abort();
@@ -182,12 +190,16 @@ export class TCPClient {
       });
 
       clearTimeout(timeoutId);
-      
+
       if (response.ok) {
-        console.log(`[${requestId}] Preflight OPTIONS bem-sucedido (${response.status})`);
+        console.log(
+          `[${requestId}] Preflight OPTIONS bem-sucedido (${response.status})`
+        );
         return true;
       } else {
-        console.log(`[${requestId}] Preflight OPTIONS falhou (${response.status})`);
+        console.log(
+          `[${requestId}] Preflight OPTIONS falhou (${response.status})`
+        );
         return false;
       }
     } catch (error) {
@@ -208,16 +220,18 @@ export class TCPClient {
 
     // Verificar se o servidor está respondendo com preflight OPTIONS
     const preflightSuccess = await this.checkPreflightConnection(path, token);
-    
+
     // Ajustar timeout baseado no sucesso do preflight
     // Se OPTIONS = 200: usa timeout de 120s
     // Se OPTIONS falha ou não existe: usa timeout de 60s
-    const dynamicTimeout = preflightSuccess 
-      ? this.optionsSuccessTimeout  // 120s quando OPTIONS retorna 200
+    const dynamicTimeout = preflightSuccess
+      ? this.optionsSuccessTimeout // 120s quando OPTIONS retorna 200
       : this.optionsFailureTimeout; // 60s quando OPTIONS falha
-    
+
     console.log(
-      `[${requestId}] Preflight: ${preflightSuccess ? 'OK (200)' : 'FALHOU'} - Timeout: ${dynamicTimeout}ms`
+      `[${requestId}] Preflight: ${
+        preflightSuccess ? "OK (200)" : "FALHOU"
+      } - Timeout: ${dynamicTimeout}ms`
     );
 
     while (retryCount <= this.maxRetries) {
@@ -362,7 +376,12 @@ export class TCPClient {
               console.log(`[${requestId}] Atualização recebida`);
             }
 
-            if (jsonObj.isComplete && jsonObj.results) {
+            // Verificar se temos resultados em formato direto {"results": [...]}
+            if (jsonObj.results && Array.isArray(jsonObj.results)) {
+              results = jsonObj.results;
+            }
+            // Verificar se temos resultados em formato de progresso com isComplete
+            else if (jsonObj.isComplete && jsonObj.results) {
               results = jsonObj.results;
             }
 
@@ -442,16 +461,18 @@ export class TCPClient {
 
     // Verificar se o servidor está respondendo com preflight OPTIONS
     const preflightSuccess = await this.checkPreflightConnection(path, token);
-    
+
     // Ajustar timeout baseado no sucesso do preflight
     // Se OPTIONS = 200: usa timeout de 120s
     // Se OPTIONS falha ou não existe: usa timeout de 60s
-    const dynamicTimeout = preflightSuccess 
-      ? this.optionsSuccessTimeout  // 120s quando OPTIONS retorna 200
+    const dynamicTimeout = preflightSuccess
+      ? this.optionsSuccessTimeout // 120s quando OPTIONS retorna 200
       : this.optionsFailureTimeout; // 60s quando OPTIONS falha
-    
+
     console.log(
-      `[${requestId}] Preflight: ${preflightSuccess ? 'OK (200)' : 'FALHOU'} - Timeout: ${dynamicTimeout}ms`
+      `[${requestId}] Preflight: ${
+        preflightSuccess ? "OK (200)" : "FALHOU"
+      } - Timeout: ${dynamicTimeout}ms`
     );
 
     while (retryCount <= this.maxRetries) {
