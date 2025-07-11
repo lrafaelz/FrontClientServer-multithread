@@ -8,18 +8,12 @@ export interface QueryResult {
 export interface CNPJResult {
   cnpj: string;
   razao_social: string;
-  nome_fantasia?: string;
-  situacao: string;
-  data_situacao: string;
-  motivo_situacao?: string;
-  cidade?: string;
+  nome_fantasia: string;
+  endereço: string;
+  endereco?: string;
   uf: string;
-  telefone?: string;
-  email?: string;
-  atividade_principal: string;
-  capital_social?: string;
-  porte?: string;
-  natureza_juridica?: string;
+  telefone: string;
+  email: string;
   socios: Socio[];
 }
 
@@ -31,33 +25,17 @@ export interface Socio {
 
 export interface PersonCNPJResult {
   cnpj: string;
+  email: string;
+  endereço: string;
   nome_fantasia: string;
-  uf: string;
+  razao_social: string;
+  telefone: string;
 }
 
 export interface CNPJByCPFResult {
   cpf: string;
   nome: string;
   empresas: CNPJResult[];
-}
-
-// Interface para representar as atualizações de progresso do servidor
-export interface ProgressUpdate {
-  status: string;
-  message?: string;
-  progress: number;
-  isComplete: boolean;
-  results?: QueryResult[];
-}
-
-// Interface para o progresso de múltiplas requisições
-export interface BatchProgressUpdate {
-  completed: number;
-  total: number;
-  progress: number;
-  currentRequest: number;
-  results: QueryResult[];
-  isComplete: boolean;
 }
 
 // Tipos para consultas
@@ -81,27 +59,13 @@ export interface QueryState {
   searchTerm: string;
   queryType: QueryType;
   results: QueryResult[] | null;
+  cnpjResults?: CNPJResult[] | null; // Dados específicos de CNPJ
   error: string | null;
   progress: number;
   status: "pending" | "completed" | "error";
   startTime: number;
   requestNumber: number;
   retryCount: number;
-  statusMessage: string;
-}
-
-export interface BatchQueryState {
-  id: string;
-  queryType: QueryType;
-  searchTerms: string[];
-  numberOfRequests: number;
-  results: QueryResult[];
-  completed: number;
-  total: number;
-  progress: number;
-  status: "pending" | "completed" | "error";
-  error: string | null;
-  startTime: number;
   statusMessage: string;
 }
 

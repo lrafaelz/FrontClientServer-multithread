@@ -1,6 +1,5 @@
-// filepath: c:\subDesktop\Unipampa\2025\Redes\FrontClientServer-multithread\src\services\WorkerManager.ts
 import { TCPClient } from "./TCPClient";
-import { QueryResult, ProgressUpdate, QueryType, QueryOptions } from "../types";
+import { QueryResult, QueryOptions } from "../types";
 
 export class WorkerManager {
   private activeConnections: number = 0;
@@ -18,8 +17,7 @@ export class WorkerManager {
   public executeQuery(
     options: QueryOptions,
     callbacks: {
-      onProgress?: (update: ProgressUpdate) => void;
-      onComplete?: (results: QueryResult[]) => void;
+      onComplete?: (results: QueryResult[], cnpjResults?: any[]) => void;
       onError?: (error: string) => void;
     }
   ): void {
@@ -40,12 +38,12 @@ export class WorkerManager {
     );
 
     const wrappedCallbacks = {
-      onComplete: (results: any) => {
+      onComplete: (results: any, cnpjResults?: any) => {
         this.activeConnections--;
         console.log(
           `Finalizando conexão ${options.queryId}. Restantes: ${this.activeConnections}`
         );
-        callbacks.onComplete?.(results);
+        callbacks.onComplete?.(results, cnpjResults);
         this._processNextInQueue();
       },
       onError: (error: string) => {
@@ -56,7 +54,6 @@ export class WorkerManager {
         callbacks.onError?.(error);
         this._processNextInQueue();
       },
-      onProgress: callbacks.onProgress,
     };
 
     // Sempre usar execução direta (sem workers)
@@ -101,8 +98,6 @@ export class WorkerManager {
         port,
         true,
         requestNumber,
-        wrappedCallbacks.onProgress, // Passamos o callback de progresso diretamente
-        undefined, // batchProgressUpdate não usado aqui
         onUnauthorized // Callback para 401 Unauthorized
       );
 
@@ -117,83 +112,23 @@ export class WorkerManager {
           results = await client.getPersonByExactName(searchTerm, token);
           break;
         case "cpf":
-          // Para CPF, simulamos o progresso manualmente pois não tem streaming
-          let intervalId: number | undefined;
-          const startTime = Date.now();
-          const updateInterval = 50;
-          const estimatedTime = 5000;
-
-          // Criar um intervalo para atualizar o progresso
-          if (wrappedCallbacks.onProgress) {
-            intervalId = window.setInterval(() => {
-              const elapsed = Date.now() - startTime;
-              const progress = Math.min(95, (elapsed / estimatedTime) * 100);
-
-              wrappedCallbacks.onProgress?.({
-                progress,
-                status: "Processando",
-                message: `Consultando CPF ${searchTerm}`,
-                isComplete: false,
-              });
-
-              if (progress >= 95) {
-                clearInterval(intervalId);
-              }
-            }, updateInterval) as unknown as number;
-          }
-
-          // Executar a consulta
+          // Executar a consulta diretamente sem simulação de progresso
           results = await client.getPersonByCPF(searchTerm, token);
-
-          // Limpar o intervalo se existir
-          if (intervalId) {
-            clearInterval(intervalId);
-          }
           break;
 
         case "cnpj":
-          // Para CNPJ, simulamos o progresso manualmente pois não tem streaming
-          let cnpjIntervalId: number | undefined;
-          const cnpjStartTime = Date.now();
-          const cnpjUpdateInterval = 50;
-          const cnpjEstimatedTime = 5000;
-
-          // Criar um intervalo para atualizar o progresso
-          if (wrappedCallbacks.onProgress) {
-            cnpjIntervalId = window.setInterval(() => {
-              const elapsed = Date.now() - cnpjStartTime;
-              const progress = Math.min(
-                95,
-                (elapsed / cnpjEstimatedTime) * 100
-              );
-
-              wrappedCallbacks.onProgress?.({
-                progress,
-                status: "Processando",
-                message: `Consultando CNPJ ${searchTerm}`,
-                isComplete: false,
-              });
-
-              if (progress >= 95) {
-                clearInterval(cnpjIntervalId);
-              }
-            }, cnpjUpdateInterval) as unknown as number;
-          }
-
           // Executar a consulta CNPJ e converter para QueryResult[]
           const cnpjResults = await client.getCompanyByCNPJ(searchTerm, token);
           results = cnpjResults.map((cnpj) => ({
             cpf: cnpj.cnpj, // Usar CNPJ no campo CPF para compatibilidade
             nome: cnpj.razao_social,
-            sexo: cnpj.natureza_juridica || "Empresa",
-            nasc: cnpj.data_situacao || "",
+            sexo: cnpj.nome_fantasia || "Empresa", // Nome fantasia no campo sexo para compatibilidade
+            nasc: cnpj.uf || "", // UF no campo nasc para compatibilidade
           }));
 
-          // Limpar o intervalo se existir
-          if (cnpjIntervalId) {
-            clearInterval(cnpjIntervalId);
-          }
-          break;
+          // Notificar resultado com dados completos de CNPJ
+          wrappedCallbacks.onComplete?.(results, cnpjResults);
+          return;
 
         default:
           throw new Error("Tipo de consulta inválido");

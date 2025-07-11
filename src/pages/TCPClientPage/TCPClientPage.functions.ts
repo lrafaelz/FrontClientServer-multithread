@@ -6,12 +6,7 @@ import {
   QueryResult,
   QueryType,
   QueryState,
-  BatchQueryState,
   CNPJByNameCPFState,
-  ProgressUpdate,
-  BatchProgressUpdate,
-  CNPJResult,
-  PersonCNPJResult,
 } from "../../types";
 
 // Validation functions
@@ -85,21 +80,13 @@ export const useTCPClientPage = () => {
   const [documentSearchTerm, setDocumentSearchTerm] = useState(""); // Para cpf e cnpj
   const [queryType, setQueryType] = useState<QueryType>("name");
   const [queries, setQueries] = useState<QueryState[]>([]);
-  const [batchQueries, setBatchQueries] = useState<BatchQueryState[]>([]);
   const [cnpjByNameCPFQueries, setCnpjByNameCPFQueries] = useState<
     CNPJByNameCPFState[]
   >([]);
   const requestCounterRef = useRef(0);
-  const progressIntervalsRef = useRef<Record<string, number>>({});
 
   // Ref para controlar requisições em andamento e evitar duplicações
   const pendingQueriesRef = useRef<Set<string>>(new Set());
-
-  // Novos estados para requisições em lote
-  const [batchMode, setBatchMode] = useState(false);
-  const [batchSize, setBatchSize] = useState(10);
-  const [batchTerms, setBatchTerms] = useState<string[]>([]);
-  const [batchTermsInput, setBatchTermsInput] = useState("");
 
   // Referência ao WorkerManager
   const workerManagerRef = useRef<WorkerManager | null>(null);
@@ -115,10 +102,6 @@ export const useTCPClientPage = () => {
         workerManagerRef.current = null;
       }
 
-      Object.values(progressIntervalsRef.current).forEach((intervalId) => {
-        window.clearInterval(intervalId);
-      });
-
       // Limpar requisições pendentes
       pendingQueriesRef.current.clear();
     };
@@ -130,7 +113,6 @@ export const useTCPClientPage = () => {
     }
   };
 
-  // Função para obter o termo de busca correto baseado no tipo
   const getCurrentSearchTerm = () => {
     if (queryType === "name" || queryType === "exactName") {
       return nameSearchTerm;
@@ -139,7 +121,6 @@ export const useTCPClientPage = () => {
     }
   };
 
-  // Função para definir o termo de busca correto baseado no tipo
   const setCurrentSearchTerm = (value: string) => {
     if (queryType === "name" || queryType === "exactName") {
       setNameSearchTerm(value);
@@ -150,7 +131,6 @@ export const useTCPClientPage = () => {
 
   const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    // Remove mask characters if it's a CPF or CNPJ input
     const cleanValue =
       queryType === "cpf" || queryType === "cnpj"
         ? value.replace(/\D/g, "")
@@ -158,7 +138,6 @@ export const useTCPClientPage = () => {
     setCurrentSearchTerm(cleanValue);
   };
 
-  // Validação do termo de busca
   const validateSearchTerm = (
     term: string,
     type: QueryType
@@ -180,7 +159,6 @@ export const useTCPClientPage = () => {
     return { isValid: true, message: "" };
   };
 
-  // Função para buscar CNPJ por CPF
   const handleCNPJByCPF = async (nome: string, cpf: string) => {
     if (!nome.trim() || !cpf.trim()) {
       alert("Nome e CPF são obrigatórios para buscar CNPJ");
@@ -208,9 +186,7 @@ export const useTCPClientPage = () => {
         parseInt(connectionConfig.port),
         true,
         ++requestCounterRef.current,
-        undefined,
-        undefined,
-        handleUnauthorized
+        handleUnauthorized // onUnauthorized
       );
 
       const results = await client.getPersonCNPJByNameAndCPF(
@@ -255,86 +231,12 @@ export const useTCPClientPage = () => {
     }
   };
 
-  // Função para processar atualizações de progresso do servidor
-  const handleProgressUpdate =
-    (queryId: string) => (update: ProgressUpdate) => {
-      setQueries((prev) =>
-        prev.map((q) => {
-          if (q.id === queryId) {
-            // Verificar se a atualização contém resultados em formato direto
-            let processedResults = q.results;
-
-            if (update.results) {
-              // Se update.results é um array, usar diretamente
-              if (Array.isArray(update.results)) {
-                processedResults = update.results;
-              }
-              // Se update.results é um objeto com propriedade 'results', extrair o array
-              else if (
-                update.results &&
-                (update.results as any).results &&
-                Array.isArray((update.results as any).results)
-              ) {
-                processedResults = (update.results as any)
-                  .results as QueryResult[];
-              }
-            }
-
-            return {
-              ...q,
-              progress: update.progress,
-              statusMessage:
-                update.message || `${update.status} (${update.progress}%)`,
-              status: update.isComplete ? "completed" : "pending",
-              results: processedResults,
-            };
-          }
-          return q;
-        })
-      );
-
-      // Se o progresso chegou a 100% e temos resultados, podemos limpar qualquer intervalo de progresso
-      if (update.isComplete && update.progress === 100) {
-        if (progressIntervalsRef.current[queryId]) {
-          clearInterval(progressIntervalsRef.current[queryId]);
-          delete progressIntervalsRef.current[queryId];
-        }
-      }
-    };
-
-  // Função para processar atualizações de progresso das requisições em lote
-  const handleBatchProgressUpdate =
-    (batchId: string) => (update: BatchProgressUpdate) => {
-      console.log(`Recebida atualização de lote ${batchId}:`, update);
-
-      setBatchQueries((prev) =>
-        prev.map((batch) => {
-          if (batch.id === batchId) {
-            return {
-              ...batch,
-              completed: update.completed,
-              total: update.total,
-              progress: update.progress,
-              results: update.results,
-              status: update.isComplete ? "completed" : "pending",
-              statusMessage: `Processadas ${update.completed}/${
-                update.total
-              } requisições (${Math.round(update.progress)}%)`,
-            };
-          }
-          return batch;
-        })
-      );
-    };
-
-  // Função para executar consulta usando o WorkerManager
   const performQueryWithWorkerManager = (query: QueryState) => {
     if (!workerManagerRef.current) {
       console.error("WorkerManager não inicializado");
       return;
     }
 
-    // Atualiza o status inicial
     setQueries((prev) =>
       prev.map((q) =>
         q.id === query.id
@@ -346,8 +248,7 @@ export const useTCPClientPage = () => {
     const queryKey = `${query.queryType}:${query.searchTerm}:${connectionConfig.host}:${connectionConfig.port}`;
 
     const callbacks = {
-      onProgress: handleProgressUpdate(query.id),
-      onComplete: (results: QueryResult[] | any) => {
+      onComplete: (results: QueryResult[] | any, cnpjResults?: any[]) => {
         pendingQueriesRef.current.delete(queryKey);
 
         let processedResults: QueryResult[] = [];
@@ -368,6 +269,7 @@ export const useTCPClientPage = () => {
               ? {
                   ...q,
                   results: processedResults,
+                  cnpjResults: cnpjResults || null,
                   status: "completed",
                   progress: 100,
                   statusMessage: "Consulta concluída com sucesso",
@@ -399,7 +301,6 @@ export const useTCPClientPage = () => {
       },
     };
 
-    // Executar a consulta usando o WorkerManager com token
     workerManagerRef.current.executeQuery(
       {
         host: connectionConfig.host,
@@ -450,13 +351,11 @@ export const useTCPClientPage = () => {
 
     setQueries((prev) => [newQuery, ...prev]);
 
-    // Usar WorkerManager para todos os tipos de consulta
     performQueryWithWorkerManager(newQuery);
   };
 
   const clearResults = () => {
     setQueries([]);
-    setBatchQueries([]);
     setCnpjByNameCPFQueries([]);
     // Limpar requisições pendentes
     pendingQueriesRef.current.clear();

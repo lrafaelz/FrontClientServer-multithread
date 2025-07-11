@@ -1,18 +1,10 @@
-import {
-  QueryResult,
-  CNPJResult,
-  Socio,
-  PersonCNPJResult,
-  CNPJByCPFResult,
-  ProgressUpdate,
-  BatchProgressUpdate,
-} from "../types";
+import { QueryResult, CNPJResult, PersonCNPJResult } from "../types";
 
 // #############################################################################
 export class TCPClient {
   private baseUrl: string;
   private requestNumber: number;
-  private maxRetries: number = 3; // Número máximo de tentativas
+  private maxRetries: number = 2; // Número máximo de tentativas
   private retryDelay: number = 1000; // Delay entre tentativas (ms)
   private timeout: number = 10000;
   private preflightTimeout: number = 5000; // Timeout específico para preflight
@@ -20,8 +12,6 @@ export class TCPClient {
   private requestTimeoutMultiplier: number = 2; // Multiplicador para requisições normais quando preflight OK
   private optionsSuccessTimeout: number = 120000; // Timeout de 120s quando OPTIONS retorna 200
   private optionsFailureTimeout: number = 60000; // Timeout de 60s quando OPTIONS falha ou não existe
-  private onProgressUpdate?: (update: ProgressUpdate) => void;
-  private onBatchProgressUpdate?: (update: BatchProgressUpdate) => void;
   private onUnauthorized?: () => void;
 
   constructor(
@@ -29,19 +19,13 @@ export class TCPClient {
     port: number,
     useHttps: boolean = true,
     requestNumber: number = 1,
-    onProgressUpdate?: (update: ProgressUpdate) => void,
-    onBatchProgressUpdate?: (update: BatchProgressUpdate) => void,
     onUnauthorized?: () => void
   ) {
-    // Configuração simples da URL base
     const protocol = useHttps ? "https" : "http";
     this.baseUrl = `${protocol}://${host}:${port}`;
     // Armazena o número da requisição passado pelo App
     this.requestNumber = requestNumber;
     // Callback para atualizações de progresso
-    this.onProgressUpdate = onProgressUpdate;
-    // Callback para atualizações de progresso em lote
-    this.onBatchProgressUpdate = onBatchProgressUpdate;
     // Callback para tratamento de 401 Unauthorized
     this.onUnauthorized = onUnauthorized;
 
@@ -50,7 +34,6 @@ export class TCPClient {
     );
   }
 
-  // Método público para ajustar os timeouts
   public configureTimeouts({
     preflightTimeout,
     streamingMultiplier,
@@ -124,12 +107,11 @@ export class TCPClient {
     return headers;
   }
 
-  // Método para esperar um tempo específico
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  // Método para verificar se o servidor está respondendo com preflight OPTIONS
+  // Verifica se o servidor está respondendo com preflight OPTIONS
   private async checkPreflightConnection(
     path: string,
     token?: string
@@ -173,262 +155,7 @@ export class TCPClient {
     }
   }
 
-  // Método para processar respostas em streaming do servidor
-  private async makeStreamRequest(
-    path: string,
-    token?: string
-  ): Promise<QueryResult[]> {
-    // Usa o número da requisição que veio do App
-    const requestId = this.requestNumber;
-    let retryCount = 0;
-    let lastError: Error | null = null;
-
-    // Verificar se o servidor está respondendo com preflight OPTIONS
-    const preflightSuccess = await this.checkPreflightConnection(path, token);
-
-    // Ajustar timeout baseado no sucesso do preflight
-    // Se OPTIONS = 200: usa timeout de 120s
-    // Se OPTIONS falha ou não existe: usa timeout de 60s
-    const dynamicTimeout = preflightSuccess
-      ? this.optionsSuccessTimeout // 120s quando OPTIONS retorna 200
-      : this.optionsFailureTimeout; // 60s quando OPTIONS falha
-
-    console.log(
-      `[${requestId}] Preflight: ${
-        preflightSuccess ? "OK (200)" : "FALHOU"
-      } - Timeout: ${dynamicTimeout}ms`
-    );
-
-    while (retryCount <= this.maxRetries) {
-      try {
-        console.log(
-          `[${requestId}] Tentativa ${retryCount + 1}/${
-            this.maxRetries + 1
-          } para: ${path}`
-        );
-        const startTime = Date.now();
-        const url = `${this.baseUrl}${path}`;
-
-        // Usando fetch com AbortController para controlar timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-          console.warn(
-            `[${requestId}] Tempo limite de ${dynamicTimeout}ms atingido, abortando requisição.`
-          );
-        }, dynamicTimeout);
-
-        console.log(
-          `[${requestId}] Iniciando requisição streaming para: ${url}`
-        );
-
-        // Fazemos fetch em modo streaming com tratamento de erro melhorado
-        const response = await fetch(url, {
-          method: "GET",
-          headers: this.getHeaders(token),
-          signal: controller.signal,
-          // Desabilitar cache para evitar problemas com requisições pendentes
-          cache: "no-store",
-          // Set mode to cors for proper CORS handling
-          mode: "cors",
-          // Set credentials to include for CORS requests
-          credentials: "include",
-        }).catch((err) => {
-          clearTimeout(timeoutId);
-          throw err;
-        });
-
-        // Limpa o timeout pois a conexão foi estabelecida
-        clearTimeout(timeoutId);
-
-        // Verifica resposta
-        if (!response.ok) {
-          // Verificar se é erro 401 (Unauthorized)
-          if (response.status === 401) {
-            console.warn(`[${requestId}] Token expirado ou inválido (401)`);
-            if (this.onUnauthorized) {
-              this.onUnauthorized();
-            }
-            throw new Error("Token expirado. Redirecionando para login...");
-          }
-
-          const errorText = await response
-            .text()
-            .catch(() => "Não foi possível ler o corpo da resposta");
-          throw new Error(
-            `Erro na requisição: ${response.status} ${response.statusText}. Detalhes: ${errorText}`
-          );
-        }
-
-        // Garantindo que temos um ReadableStream
-        if (!response.body) {
-          throw new Error("Resposta não possui corpo legível");
-        }
-
-        // Processar o stream
-        const reader = response.body.getReader();
-        let incompleteJSON = "";
-        let results: QueryResult[] = [];
-
-        // Função para extrair objetos JSON válidos de texto
-        const extractJSONObjects = (text: string): [any[], string] => {
-          let validObjects: any[] = [];
-          let remaining = text;
-
-          // Versão otimizada: busca por objetos JSON usando expressões regulares
-          // Isso é mais rápido que analisar caractere por caractere
-          const regex = /{[^{}]*(?:{[^{}]*}[^{}]*)*}/g;
-          let match;
-
-          // Encontra todos os possíveis objetos JSON
-          const matches = [];
-          while ((match = regex.exec(remaining)) !== null) {
-            const jsonStr = match[0];
-            const start = match.index;
-            const end = start + jsonStr.length;
-
-            try {
-              const jsonObj = JSON.parse(jsonStr);
-              validObjects.push(jsonObj);
-              matches.push({ start, end });
-            } catch (e) {
-              // Ignora objetos JSON inválidos
-            }
-          }
-
-          // Se não encontramos correspondências, retorna o texto original como "restante"
-          if (matches.length === 0) {
-            // Limita o tamanho do texto restante para evitar vazamentos de memória
-            if (remaining.length > 10000) {
-              // Se for muito grande, mantém apenas os últimos 1000 caracteres
-              // que podem conter o início de um objeto JSON
-              remaining = remaining.substring(remaining.length - 1000);
-            }
-            return [validObjects, remaining];
-          }
-
-          // Caso contrário, mantém apenas o texto após o último objeto completo
-          const lastMatch = matches[matches.length - 1];
-          remaining = remaining.substring(lastMatch.end);
-
-          // Limita o tamanho do buffer para evitar vazamentos de memória
-          if (remaining.length > 10000) {
-            remaining = remaining.substring(remaining.length - 1000);
-          }
-
-          return [validObjects, remaining];
-        };
-
-        let lastProgressUpdate = Date.now();
-        const THROTTLE_INTERVAL = 100; // ms
-
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            // Reduzimos o nível de log para melhorar performance
-            if (this.requestNumber % 10 === 0) {
-              // Log apenas a cada 10 requisições
-              console.log(`[${requestId}] Stream concluído`);
-            }
-            break;
-          }
-
-          // Converte o chunk para texto
-          const chunk = new TextDecoder().decode(value);
-          const currentText = incompleteJSON + chunk;
-
-          // Extraímos objetos JSON completos do texto atual
-          const [jsonObjects, remaining] = extractJSONObjects(currentText);
-          incompleteJSON = remaining;
-
-          // Processamos cada objeto JSON encontrado com throttling para atualizações de progresso
-          for (const jsonObj of jsonObjects) {
-            // Reduzimos os logs para melhorar desempenho
-            if (this.requestNumber % 10 === 0) {
-              // Log apenas a cada 10 requisições
-              console.log(`[${requestId}] Atualização recebida`);
-            }
-
-            // Verificar se temos resultados em formato direto {"results": [...]}
-            if (jsonObj.results && Array.isArray(jsonObj.results)) {
-              results = jsonObj.results;
-            }
-            // Verificar se temos resultados em formato de progresso com isComplete
-            else if (jsonObj.isComplete && jsonObj.results) {
-              results = jsonObj.results;
-            }
-
-            // Aplicamos throttling nas atualizações de progresso para reduzir sobrecarga de UI
-            const now = Date.now();
-            if (
-              this.onProgressUpdate &&
-              "progress" in jsonObj &&
-              (now - lastProgressUpdate > THROTTLE_INTERVAL ||
-                jsonObj.isComplete)
-            ) {
-              this.onProgressUpdate(jsonObj);
-              lastProgressUpdate = now;
-            }
-          }
-        }
-
-        const endTime = Date.now();
-        console.log(
-          `[${requestId}] Stream processado com sucesso em ${
-            endTime - startTime
-          }ms`
-        );
-
-        // Após o processamento, você precisa garantir que o reader e a resposta sejam fechados
-        reader.releaseLock();
-        response.body.cancel();
-
-        // Se chegamos aqui com sucesso, retornamos os resultados
-        return results;
-      } catch (error) {
-        // Armazena o último erro
-        lastError =
-          error instanceof Error ? error : new Error("Erro desconhecido");
-        const errorMessage = lastError.message;
-
-        // Loga o erro com detalhes específicos
-        if (error instanceof DOMException && error.name === "AbortError") {
-          console.error(
-            `[${requestId}] Tempo limite excedido após ${this.timeout}ms`
-          );
-        } else {
-          console.error(
-            `[${requestId}] Erro na tentativa ${
-              retryCount + 1
-            }: ${errorMessage}`
-          );
-        }
-
-        // Incrementa contador de tentativas
-        retryCount++;
-
-        // Se ainda há tentativas disponíveis, espera antes da próxima
-        if (retryCount <= this.maxRetries) {
-          const waitTime = this.retryDelay * retryCount; // Aumenta o tempo entre tentativas
-          console.log(
-            `[${requestId}] Esperando ${waitTime}ms antes da próxima tentativa...`
-          );
-          await this.delay(waitTime);
-        }
-      }
-    }
-
-    // Se chegamos aqui, todas as tentativas falharam
-    console.error(
-      `[${requestId}] Todas as ${this.maxRetries + 1} tentativas falharam`
-    );
-    throw lastError || new Error("Falha após múltiplas tentativas");
-  }
-
-  // Método para requisições normais (não streaming)
   private async makeRequest(path: string, token?: string): Promise<any> {
-    // Usa o número da requisição que veio do App
     const requestId = this.requestNumber;
     let retryCount = 0;
     let lastError: Error | null = null;
@@ -518,6 +245,14 @@ export class TCPClient {
           error instanceof Error ? error : new Error("Erro desconhecido");
         const errorMessage = lastError.message;
 
+        // Verificar se é erro 401 (Token expirado) - não fazer retry
+        if (errorMessage.includes("Token expirado")) {
+          console.error(
+            `[${requestId}] Erro 401 detectado, não fazendo novas tentativas`
+          );
+          break;
+        }
+
         // Log do erro com detalhes específicos
         if (error instanceof DOMException && error.name === "AbortError") {
           console.error(
@@ -554,7 +289,7 @@ export class TCPClient {
 
   async getPersonByName(name: string, token?: string): Promise<QueryResult[]> {
     // Usando o método de streaming para as buscas por nome
-    return await this.makeStreamRequest(
+    return await this.makeRequest(
       `/get-person-by-name/${encodeURIComponent(name)}`,
       token
     );
@@ -565,7 +300,7 @@ export class TCPClient {
     token?: string
   ): Promise<QueryResult[]> {
     // Usando o método de streaming para as buscas por nome exato
-    return await this.makeStreamRequest(
+    return await this.makeRequest(
       `/get-person-by-exact-name/${encodeURIComponent(name)}`,
       token
     );
@@ -687,21 +422,6 @@ export class TCPClient {
 
         // Incrementa o contador de requisições completadas
         completed++;
-
-        // Calcula o progresso
-        const progress = (completed / total) * 100;
-
-        // Notifica o progresso do lote
-        if (this.onBatchProgressUpdate) {
-          this.onBatchProgressUpdate({
-            completed,
-            total,
-            progress,
-            currentRequest: i + 1,
-            results: [...results], // Cria uma cópia para evitar referências compartilhadas
-            isComplete: completed === total,
-          });
-        }
       } catch (error) {
         console.error(`Erro na requisição ${i + 1} (${term}):`, error);
         // Continua processando mesmo com erro em uma requisição

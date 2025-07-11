@@ -21,10 +21,10 @@ import { PatternFormat } from "react-number-format";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import AppHeader from "../../components/AppHeader/AppHeader";
 import { useTCPClientPage } from "./TCPClientPage.functions";
+import { Socio } from "../../types";
 import {
   StyledContainer,
   mainPaperStyles,
-  alertStyles,
   buttonBoxStyles,
   accordionBoxStyles,
   progressBarStyles,
@@ -44,8 +44,6 @@ function TCPClientPage() {
     setQueryType,
     queries,
     cnpjByNameCPFQueries,
-    user,
-    token,
     connectionConfig,
     updateConnectionConfig,
     handleQuery,
@@ -64,14 +62,6 @@ function TCPClientPage() {
           <Typography variant="h4" component="h1" gutterBottom>
             Sistema de Consulta CPF/CNPJ
           </Typography>
-
-          {user && (
-            <Alert severity="info" sx={alertStyles}>
-              Conectado como: <strong>{user.name}</strong> ({user.email})
-              <br />
-              Token: {token ? `${token.substring(0, 20)}...` : "Não disponível"}
-            </Alert>
-          )}
 
           <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
             <Box sx={{ flex: 1, minWidth: "200px" }}>
@@ -211,21 +201,60 @@ function TCPClientPage() {
                     <Paper key={index} sx={resultPaperStyles}>
                       <Box sx={resultHeaderStyles}>
                         <Box>
-                          {query.queryType === "cnpj" ? (
+                          {query.queryType === "cnpj" && query.cnpjResults ? (
                             <>
                               <Typography>
-                                <strong>Razão Social:</strong> {result.nome}
+                                <strong>Razão Social:</strong>{" "}
+                                {query.cnpjResults[index]?.razao_social}
                               </Typography>
                               <Typography>
-                                <strong>CNPJ:</strong> {result.cpf}
+                                <strong>CNPJ:</strong>{" "}
+                                {query.cnpjResults[index]?.cnpj}
                               </Typography>
                               <Typography>
-                                <strong>Natureza Jurídica:</strong>{" "}
-                                {result.sexo}
+                                <strong>Nome Fantasia:</strong>{" "}
+                                {query.cnpjResults[index]?.nome_fantasia ||
+                                  "Não informado"}
+                              </Typography>
+
+                              <Typography>
+                                <strong>Email:</strong>{" "}
+                                {query.cnpjResults[index]?.email ||
+                                  "Não informado"}
                               </Typography>
                               <Typography>
-                                <strong>Data Situação:</strong> {result.nasc}
+                                <strong>Telefone:</strong>{" "}
+                                {query.cnpjResults[index]?.telefone ||
+                                  "Não informado"}
                               </Typography>
+                              <Typography>
+                                <strong>Endereço:</strong>{" "}
+                                {query.cnpjResults[index]?.endereço ||
+                                  query.cnpjResults[index]?.endereco ||
+                                  "Não informado"}
+                              </Typography>
+                              {query.cnpjResults[index]?.socios &&
+                                query.cnpjResults[index].socios.length > 0 && (
+                                  <Box sx={{ mt: 1 }}>
+                                    <Typography variant="subtitle2">
+                                      <strong>Sócios:</strong>
+                                    </Typography>
+                                    {query.cnpjResults[index].socios.map(
+                                      (socio: Socio, socioIndex: number) => (
+                                        <Typography
+                                          key={socioIndex}
+                                          variant="body2"
+                                          sx={{ ml: 2 }}
+                                        >
+                                          • {socio.nome_socio} - CPF/CNPJ:{" "}
+                                          {socio.cnpj_cpf_socio}{" "}
+                                          {socio.nome_representante &&
+                                            `(Rep: ${socio.nome_representante})`}
+                                        </Typography>
+                                      )
+                                    )}
+                                  </Box>
+                                )}
                             </>
                           ) : (
                             <>
@@ -245,7 +274,8 @@ function TCPClientPage() {
                           )}
                         </Box>
                         {(query.queryType === "name" ||
-                          query.queryType === "exactName") && (
+                          query.queryType === "exactName" ||
+                          query.queryType === "cpf") && (
                           <Button
                             variant="contained"
                             size="small"
@@ -308,11 +338,23 @@ function TCPClientPage() {
                             <strong>CNPJ:</strong> {result.cnpj}
                           </Typography>
                           <Typography>
-                            <strong>Nome Fantasia:</strong>{" "}
-                            {result.nome_fantasia}
+                            <strong>Razão Social:</strong> {result.razao_social}
                           </Typography>
                           <Typography>
-                            <strong>UF:</strong> {result.uf}
+                            <strong>Nome Fantasia:</strong>{" "}
+                            {result.nome_fantasia || "Não informado"}
+                          </Typography>
+                          <Typography>
+                            <strong>Email:</strong>{" "}
+                            {result.email || "Não informado"}
+                          </Typography>
+                          <Typography>
+                            <strong>Telefone:</strong>{" "}
+                            {result.telefone || "Não informado"}
+                          </Typography>
+                          <Typography>
+                            <strong>Endereço:</strong>{" "}
+                            {result.endereço || "Não informado"}
                           </Typography>
                         </Box>
                       </Box>
