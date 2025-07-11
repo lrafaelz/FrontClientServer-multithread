@@ -1,17 +1,6 @@
 // filepath: c:\subDesktop\Unipampa\2025\Redes\FrontClientServer-multithread\src\services\WorkerManager.ts
-import { TCPClient, QueryResult, ProgressUpdate } from "./TCPClient";
-
-export type QueryType = "name" | "exactName" | "cpf" | "cnpj";
-
-interface QueryOptions {
-  host: string;
-  port: number;
-  searchTerm: string;
-  queryType: QueryType;
-  queryId: string;
-  requestNumber: number;
-  token?: string;
-}
+import { TCPClient } from "./TCPClient";
+import { QueryResult, ProgressUpdate, QueryType, QueryOptions } from "../types";
 
 export class WorkerManager {
   private activeConnections: number = 0;

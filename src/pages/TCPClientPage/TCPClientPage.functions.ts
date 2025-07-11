@@ -1,57 +1,18 @@
 import { useState, useRef, useEffect } from "react";
+import { TCPClient } from "../../services/TCPClient";
+import { WorkerManager } from "../../services/WorkerManager";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   QueryResult,
-  TCPClient,
+  QueryType,
+  QueryState,
+  BatchQueryState,
+  CNPJByNameCPFState,
   ProgressUpdate,
   BatchProgressUpdate,
   CNPJResult,
-} from "../../services/TCPClient";
-import { WorkerManager } from "../../services/WorkerManager";
-import { useAuth } from "../../contexts/AuthContext";
-
-// Types
-export type QueryType = "name" | "exactName" | "cpf" | "cnpj";
-
-// Interfaces
-export interface QueryState {
-  id: string;
-  searchTerm: string;
-  queryType: QueryType;
-  results: QueryResult[] | null;
-  error: string | null;
-  progress: number;
-  status: "pending" | "completed" | "error";
-  startTime: number;
-  requestNumber: number;
-  retryCount: number;
-  statusMessage: string;
-}
-
-export interface BatchQueryState {
-  id: string;
-  queryType: QueryType;
-  searchTerms: string[];
-  numberOfRequests: number;
-  results: QueryResult[];
-  completed: number;
-  total: number;
-  progress: number;
-  status: "pending" | "completed" | "error";
-  error: string | null;
-  startTime: number;
-  statusMessage: string;
-}
-
-export interface CNPJByNameCPFState {
-  id: string;
-  searchName: string;
-  searchCPF: string;
-  results: CNPJResult[] | null;
-  error: string | null;
-  isLoading: boolean;
-  status: "pending" | "completed" | "error";
-  startTime: number;
-}
+  PersonCNPJResult,
+} from "../../types";
 
 // Validation functions
 export const validateCPF = (cpf: string): boolean => {
@@ -98,7 +59,7 @@ export const validateCNPJ = (cnpj: string): boolean => {
   if (digit1 !== parseInt(cleanCNPJ.charAt(12))) return false;
 
   // Pesos para o segundo dígito verificador (incluindo o primeiro dígito verificador)
-  const weights2 = [6, 7, 8, 9, 2, 3, 4, 5, 6, 7, 8, 9, 2];
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
 
   // Calcular segundo dígito verificador (incluindo o primeiro dígito verificador)
   sum = 0;
@@ -204,13 +165,11 @@ export const useTCPClientPage = () => {
       if (!validateCPF(term)) {
         return { isValid: false, message: "CPF inválido" };
       }
+    } else if (type === "cnpj") {
+      if (!validateCNPJ(term)) {
+        return { isValid: false, message: "CNPJ inválido" };
+      }
     }
-    // CNPJ validation disabled - always valid
-    // else if (type === "cnpj") {
-    //   if (!validateCNPJ(term)) {
-    //     return { isValid: false, message: "CNPJ inválido" };
-    //   }
-    // }
 
     return { isValid: true, message: "" };
   };
@@ -256,7 +215,7 @@ export const useTCPClientPage = () => {
           q.id === newQuery.id
             ? {
                 ...q,
-                results: results as CNPJResult[],
+                results: results,
                 isLoading: false,
                 status: "completed",
                 error: null,
@@ -530,7 +489,6 @@ export const useTCPClientPage = () => {
     handleKeyPress,
     handleSearchTermChange,
     handleCNPJByCPF,
-    validateSearchTerm,
     getCurrentSearchTerm,
   };
 };
