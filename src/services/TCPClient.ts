@@ -12,7 +12,7 @@ export interface CNPJResult {
   situacao: string;
   data_situacao: string;
   motivo_situacao?: string;
-  cidade: string;
+  cidade?: string;
   uf: string;
   telefone?: string;
   email?: string;
@@ -20,6 +20,19 @@ export interface CNPJResult {
   capital_social?: string;
   porte?: string;
   natureza_juridica?: string;
+  socios: Socio[];
+}
+
+export interface Socio {
+  nome_socio: string;
+  nome_representante: string;
+  cnpj_cpf_socio: string;
+}
+
+export interface PersonCNPJResult {
+  cnpj: string;
+  nome_fantasia: string;
+  uf: string;
 }
 
 export interface CNPJByCPFResult {
@@ -607,6 +620,55 @@ export class TCPClient {
     }
   }
 
+  async getCompanyByCNPJ(cnpj: string, token?: string): Promise<CNPJResult[]> {
+    try {
+      const formattedCNPJ = this.formatCNPJ(cnpj);
+      console.log(`Formatando CNPJ: "${cnpj}" -> "${formattedCNPJ}"`);
+
+      // Garantindo que não há caracteres especiais na URL
+      const sanitizedCNPJ = formattedCNPJ.trim();
+      // CNPJ usando o método normal (não streaming)
+      const data = await this.makeRequest(
+        `/get-cnpj-person-by-cnpj/${sanitizedCNPJ}`,
+        token
+      );
+      return data.results;
+    } catch (error) {
+      console.error(`[${this.requestNumber}] Erro ao buscar por CNPJ:`, error);
+      throw error;
+    }
+  }
+
+  async getPersonCNPJByNameAndCPF(
+    name: string,
+    cpf: string,
+    token?: string
+  ): Promise<PersonCNPJResult[]> {
+    try {
+      const formattedCPF = this.formatCPF(cpf);
+      console.log(
+        `Buscando CNPJ por Nome: "${name}" e CPF: "${cpf}" -> "${formattedCPF}"`
+      );
+
+      // Sanitizar nome e CPF para URL
+      const sanitizedName = encodeURIComponent(name.trim());
+      const sanitizedCPF = formattedCPF.trim();
+
+      // Fazer requisição para a nova rota
+      const data = await this.makeRequest(
+        `/get-person-cnpj-by-name-and-cpf/${sanitizedName}/${sanitizedCPF}`,
+        token
+      );
+      return data.results;
+    } catch (error) {
+      console.error(
+        `[${this.requestNumber}] Erro ao buscar CNPJ por nome e CPF:`,
+        error
+      );
+      throw error;
+    }
+  }
+
   // Método para executar múltiplas requisições em sequência
   async batchQuery(
     queryType: "name" | "exactName" | "cpf" | "cnpj",
@@ -637,6 +699,16 @@ export class TCPClient {
             break;
           case "cpf":
             queryResults = await this.getPersonByCPF(term);
+            break;
+          case "cnpj":
+            // Para CNPJ, precisamos converter CNPJResult[] para QueryResult[]
+            const cnpjResults = await this.getCompanyByCNPJ(term);
+            // @ts-ignore
+            queryResults = cnpjResults.map((cnpj) => ({
+              cpf: cnpj.cnpj, // Usar CNPJ no campo CPF para compatibilidade
+              nome_fantasia: cnpj.nome_fantasia || cnpj.razao_social,
+              socios: cnpj.socios,
+            }));
             break;
         }
 

@@ -44,6 +44,7 @@ function TCPClientPage() {
     setQueryType,
     queries,
     batchQueries,
+    cnpjByNameCPFQueries,
     user,
     token,
     connectionConfig,
@@ -170,7 +171,11 @@ function TCPClientPage() {
             <Button
               variant="outlined"
               onClick={clearResults}
-              disabled={queries.length === 0 && batchQueries.length === 0}
+              disabled={
+                queries.length === 0 &&
+                batchQueries.length === 0 &&
+                cnpjByNameCPFQueries.length === 0
+              }
             >
               Limpar Resultados
             </Button>
@@ -209,18 +214,38 @@ function TCPClientPage() {
                     <Paper key={index} sx={resultPaperStyles}>
                       <Box sx={resultHeaderStyles}>
                         <Box>
-                          <Typography>
-                            <strong>Nome:</strong> {result.nome}
-                          </Typography>
-                          <Typography>
-                            <strong>CPF:</strong> {result.cpf}
-                          </Typography>
-                          <Typography>
-                            <strong>Sexo:</strong> {result.sexo}
-                          </Typography>
-                          <Typography>
-                            <strong>Nascimento:</strong> {result.nasc}
-                          </Typography>
+                          {query.queryType === "cnpj" ? (
+                            <>
+                              <Typography>
+                                <strong>Razão Social:</strong> {result.nome}
+                              </Typography>
+                              <Typography>
+                                <strong>CNPJ:</strong> {result.cpf}
+                              </Typography>
+                              <Typography>
+                                <strong>Natureza Jurídica:</strong>{" "}
+                                {result.sexo}
+                              </Typography>
+                              <Typography>
+                                <strong>Data Situação:</strong> {result.nasc}
+                              </Typography>
+                            </>
+                          ) : (
+                            <>
+                              <Typography>
+                                <strong>Nome:</strong> {result.nome}
+                              </Typography>
+                              <Typography>
+                                <strong>CPF:</strong> {result.cpf}
+                              </Typography>
+                              <Typography>
+                                <strong>Sexo:</strong> {result.sexo}
+                              </Typography>
+                              <Typography>
+                                <strong>Nascimento:</strong> {result.nasc}
+                              </Typography>
+                            </>
+                          )}
                         </Box>
                         {(query.queryType === "name" ||
                           query.queryType === "exactName") && (
@@ -228,7 +253,9 @@ function TCPClientPage() {
                             variant="contained"
                             size="small"
                             sx={cnpjButtonStyles}
-                            onClick={() => handleCNPJByCPF(result.cpf)}
+                            onClick={() =>
+                              handleCNPJByCPF(result.nome, result.cpf)
+                            }
                           >
                             Buscar CNPJ
                           </Button>
@@ -243,6 +270,64 @@ function TCPClientPage() {
                   <Typography>Processando consulta...</Typography>
                 </Box>
               )}
+            </AccordionDetails>
+          </Accordion>
+        ))}
+
+        {/* Resultados das Consultas CNPJ por Nome e CPF */}
+        {cnpjByNameCPFQueries.map((query) => (
+          <Accordion key={query.id} sx={{ mb: 2 }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box sx={accordionBoxStyles}>
+                <Typography variant="h6">
+                  CNPJ por Nome/CPF: {query.searchName} - {query.searchCPF}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Status:{" "}
+                  {query.isLoading
+                    ? "Processando..."
+                    : query.status === "completed"
+                    ? "Concluído"
+                    : query.status === "error"
+                    ? "Erro"
+                    : "Pendente"}
+                </Typography>
+                {query.isLoading && <LinearProgress sx={progressBarStyles} />}
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              {query.error ? (
+                <Alert severity="error">{query.error}</Alert>
+              ) : query.results ? (
+                <Box>
+                  <Typography variant="body1" gutterBottom>
+                    CNPJs encontrados: {query.results.length}
+                  </Typography>
+                  {query.results.map((result, index) => (
+                    <Paper key={index} sx={resultPaperStyles}>
+                      <Box sx={resultHeaderStyles}>
+                        <Box>
+                          <Typography>
+                            <strong>CNPJ:</strong> {result.cnpj}
+                          </Typography>
+                          <Typography>
+                            <strong>Nome Fantasia:</strong>{" "}
+                            {result.nome_fantasia}
+                          </Typography>
+                          <Typography>
+                            <strong>UF:</strong> {result.uf}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Paper>
+                  ))}
+                </Box>
+              ) : query.isLoading ? (
+                <Box sx={loadingBoxStyles}>
+                  <CircularProgress size={24} sx={loadingProgressStyles} />
+                  <Typography>Buscando CNPJs...</Typography>
+                </Box>
+              ) : null}
             </AccordionDetails>
           </Accordion>
         ))}

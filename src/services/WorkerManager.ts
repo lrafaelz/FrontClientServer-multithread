@@ -152,6 +152,50 @@ export class WorkerManager {
           }
           break;
 
+        case "cnpj":
+          // Para CNPJ, simulamos o progresso manualmente pois não tem streaming
+          let cnpjIntervalId: number | undefined;
+          const cnpjStartTime = Date.now();
+          const cnpjUpdateInterval = 50;
+          const cnpjEstimatedTime = 5000;
+
+          // Criar um intervalo para atualizar o progresso
+          if (wrappedCallbacks.onProgress) {
+            cnpjIntervalId = window.setInterval(() => {
+              const elapsed = Date.now() - cnpjStartTime;
+              const progress = Math.min(
+                95,
+                (elapsed / cnpjEstimatedTime) * 100
+              );
+
+              wrappedCallbacks.onProgress?.({
+                progress,
+                status: "Processando",
+                message: `Consultando CNPJ ${searchTerm}`,
+                isComplete: false,
+              });
+
+              if (progress >= 95) {
+                clearInterval(cnpjIntervalId);
+              }
+            }, cnpjUpdateInterval) as unknown as number;
+          }
+
+          // Executar a consulta CNPJ e converter para QueryResult[]
+          const cnpjResults = await client.getCompanyByCNPJ(searchTerm, token);
+          results = cnpjResults.map((cnpj) => ({
+            cpf: cnpj.cnpj, // Usar CNPJ no campo CPF para compatibilidade
+            nome: cnpj.razao_social,
+            sexo: cnpj.natureza_juridica || "Empresa",
+            nasc: cnpj.data_situacao || "",
+          }));
+
+          // Limpar o intervalo se existir
+          if (cnpjIntervalId) {
+            clearInterval(cnpjIntervalId);
+          }
+          break;
+
         default:
           throw new Error("Tipo de consulta inválido");
       }

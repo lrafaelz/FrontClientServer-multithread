@@ -4,6 +4,7 @@ import {
   TCPClient,
   ProgressUpdate,
   BatchProgressUpdate,
+  CNPJResult,
 } from "../../services/TCPClient";
 import { WorkerManager } from "../../services/WorkerManager";
 import { useAuth } from "../../contexts/AuthContext";
@@ -39,6 +40,17 @@ export interface BatchQueryState {
   error: string | null;
   startTime: number;
   statusMessage: string;
+}
+
+export interface CNPJByNameCPFState {
+  id: string;
+  searchName: string;
+  searchCPF: string;
+  results: CNPJResult[] | null;
+  error: string | null;
+  isLoading: boolean;
+  status: "pending" | "completed" | "error";
+  startTime: number;
 }
 
 // Validation functions
@@ -107,6 +119,9 @@ export const useTCPClientPage = () => {
   const [queryType, setQueryType] = useState<QueryType>("name");
   const [queries, setQueries] = useState<QueryState[]>([]);
   const [batchQueries, setBatchQueries] = useState<BatchQueryState[]>([]);
+  const [cnpjByNameCPFQueries, setCnpjByNameCPFQueries] = useState<
+    CNPJByNameCPFState[]
+  >([]);
   const requestCounterRef = useRef(0);
   const progressIntervalsRef = useRef<Record<string, number>>({});
 
@@ -201,68 +216,75 @@ export const useTCPClientPage = () => {
   };
 
   // Função para buscar CNPJ por CPF
-  const handleCNPJByCPF = (cpf: string) => {
-    console.log("Buscando CNPJ por CPF:", cpf);
-    // TODO: Implementar quando tiver a URL da API
-    alert(`CPF: ${cpf}`);
-  };
+  const handleCNPJByCPF = async (nome: string, cpf: string) => {
+    if (!nome.trim() || !cpf.trim()) {
+      alert("Nome e CPF são obrigatórios para buscar CNPJ");
+      return;
+    }
 
-  // Função específica para consulta CNPJ
-  const performCNPJQuery = (query: QueryState) => {
-    console.log("Realizando consulta CNPJ:", query.searchTerm);
+    const newQuery: CNPJByNameCPFState = {
+      id: Date.now().toString(),
+      searchName: nome,
+      searchCPF: cpf,
+      results: null,
+      error: null,
+      isLoading: true,
+      status: "pending",
+      startTime: Date.now(),
+    };
 
-    // Criar chave para remover da lista de pendentes
-    const queryKey = `${query.queryType}:${query.searchTerm}:${connectionConfig.host}:${connectionConfig.port}`;
+    setCnpjByNameCPFQueries((prev) => [newQuery, ...prev]);
 
-    // Atualiza o status inicial
-    setQueries((prev) =>
-      prev.map((q) =>
-        q.id === query.id
-          ? { ...q, statusMessage: "Iniciando consulta CNPJ...", progress: 0 }
-          : q
-      )
-    );
+    try {
+      console.log(`Buscando CNPJs para: Nome="${nome}", CPF="${cpf}"`);
 
-    // Simular progresso para CNPJ (por enquanto)
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 20;
+      const client = new TCPClient(
+        connectionConfig.host,
+        parseInt(connectionConfig.port),
+        true,
+        ++requestCounterRef.current
+      );
 
-      setQueries((prev) =>
+      const results = await client.getPersonCNPJByNameAndCPF(
+        nome,
+        cpf,
+        token || undefined
+      );
+
+      setCnpjByNameCPFQueries((prev) =>
         prev.map((q) =>
-          q.id === query.id
+          q.id === newQuery.id
             ? {
                 ...q,
-                progress,
-                statusMessage: `Consultando CNPJ... (${progress}%)`,
-                status: progress >= 100 ? "completed" : "pending",
+                results: results as CNPJResult[],
+                isLoading: false,
+                status: "completed",
+                error: null,
               }
             : q
         )
       );
 
-      if (progress >= 100) {
-        clearInterval(interval);
-        // Remover da lista de requisições pendentes
-        pendingQueriesRef.current.delete(queryKey);
+      console.log(`Encontrados ${results.length} CNPJs para ${nome}`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Erro desconhecido";
 
-        // TODO: Implementar resultado real quando tiver a API
-        setQueries((prev) =>
-          prev.map((q) =>
-            q.id === query.id
-              ? {
-                  ...q,
-                  results: [], // Por enquanto array vazio
-                  status: "completed",
-                  progress: 100,
-                  statusMessage:
-                    "Consulta CNPJ concluída (funcionalidade será implementada)",
-                }
-              : q
-          )
-        );
-      }
-    }, 500);
+      setCnpjByNameCPFQueries((prev) =>
+        prev.map((q) =>
+          q.id === newQuery.id
+            ? {
+                ...q,
+                error: errorMessage,
+                isLoading: false,
+                status: "error",
+              }
+            : q
+        )
+      );
+
+      console.error("Erro ao buscar CNPJ por nome e CPF:", error);
+    }
   };
 
   // Função para processar atualizações de progresso do servidor
@@ -466,17 +488,14 @@ export const useTCPClientPage = () => {
 
     setQueries((prev) => [newQuery, ...prev]);
 
-    // Para CNPJ, usar função específica temporária
-    if (queryType === "cnpj") {
-      performCNPJQuery(newQuery);
-    } else {
-      performQueryWithWorkerManager(newQuery);
-    }
+    // Usar WorkerManager para todos os tipos de consulta
+    performQueryWithWorkerManager(newQuery);
   };
 
   const clearResults = () => {
     setQueries([]);
     setBatchQueries([]);
+    setCnpjByNameCPFQueries([]);
     // Limpar requisições pendentes
     pendingQueriesRef.current.clear();
   };
@@ -493,6 +512,7 @@ export const useTCPClientPage = () => {
     setQueryType,
     queries,
     batchQueries,
+    cnpjByNameCPFQueries,
     batchMode,
     setBatchMode,
     batchSize,
