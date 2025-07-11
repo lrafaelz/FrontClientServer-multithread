@@ -51,7 +51,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [connectionConfig, setConnectionConfig] = useState<ConnectionConfig>({
-    host: "127.0.0.1",
+    host: "192.168.1.101",
     port: "5000",
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -112,10 +112,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           success: true,
           data: {
             message: data.message,
+            access_token: data.access_token, // Include the real token from the API
             user: {
-              id: username, // Use username as ID since backend doesn't provide user details
-              email: username, // Use username as email for compatibility
-              name: username, // Use username as display name
+              id: data.username || username, // Use username from response or fallback
+              email: data.username || username, // Use username from response or fallback
+              name: data.username || username, // Use username from response or fallback
             },
           },
         };
@@ -148,14 +149,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await apiLogin(email, password, host, port);
 
       if (response.success && response.data) {
-        const { user: newUser } = response.data;
+        const { user: newUser, access_token } = response.data;
 
-        // Generate a session token for frontend use (since backend uses session cookies)
-        const sessionToken = `session-${Date.now()}-${Math.random()
-          .toString(36)
-          .substr(2, 9)}`;
-
-        setToken(sessionToken);
+        // Use the real access_token from the API response
+        setToken(access_token);
         setUser(newUser);
 
         // Update connection config
@@ -163,7 +160,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setConnectionConfig(newConnectionConfig);
 
         // Save to localStorage
-        localStorage.setItem("authToken", sessionToken);
+        localStorage.setItem("authToken", access_token);
         localStorage.setItem("authUser", JSON.stringify(newUser));
         localStorage.setItem(
           "connectionConfig",
