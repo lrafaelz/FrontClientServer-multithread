@@ -72,6 +72,7 @@ export interface QueryOptions {
   queryId: string;
   requestNumber: number;
   token?: string;
+  onUnauthorized?: () => void;
 }
 
 // Interfaces para estados das consultas

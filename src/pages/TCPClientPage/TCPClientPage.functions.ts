@@ -74,7 +74,13 @@ export const validateCNPJ = (cnpj: string): boolean => {
 };
 
 export const useTCPClientPage = () => {
-  const { token, user, connectionConfig, updateConnectionConfig } = useAuth();
+  const {
+    token,
+    user,
+    connectionConfig,
+    updateConnectionConfig,
+    handleUnauthorized,
+  } = useAuth();
   const [nameSearchTerm, setNameSearchTerm] = useState(""); // Para name e exactName
   const [documentSearchTerm, setDocumentSearchTerm] = useState(""); // Para cpf e cnpj
   const [queryType, setQueryType] = useState<QueryType>("name");
@@ -201,7 +207,10 @@ export const useTCPClientPage = () => {
         connectionConfig.host,
         parseInt(connectionConfig.port),
         true,
-        ++requestCounterRef.current
+        ++requestCounterRef.current,
+        undefined,
+        undefined,
+        handleUnauthorized
       );
 
       const results = await client.getPersonCNPJByNameAndCPF(
@@ -318,7 +327,7 @@ export const useTCPClientPage = () => {
       );
     };
 
-  // Função para executar consulta usando o WorkerManager (substitui performQuery)
+  // Função para executar consulta usando o WorkerManager
   const performQueryWithWorkerManager = (query: QueryState) => {
     if (!workerManagerRef.current) {
       console.error("WorkerManager não inicializado");
@@ -334,17 +343,13 @@ export const useTCPClientPage = () => {
       )
     );
 
-    // Criar chave para remover da lista de pendentes
     const queryKey = `${query.queryType}:${query.searchTerm}:${connectionConfig.host}:${connectionConfig.port}`;
 
-    // Configurar as callbacks
     const callbacks = {
       onProgress: handleProgressUpdate(query.id),
       onComplete: (results: QueryResult[] | any) => {
-        // Remover da lista de requisições pendentes
         pendingQueriesRef.current.delete(queryKey);
 
-        // Processar os resultados para garantir que temos o formato correto
         let processedResults: QueryResult[] = [];
 
         if (Array.isArray(results)) {
@@ -372,7 +377,6 @@ export const useTCPClientPage = () => {
         );
       },
       onError: (errorMessage: string) => {
-        // Remover da lista de requisições pendentes
         pendingQueriesRef.current.delete(queryKey);
 
         console.error(
@@ -404,7 +408,8 @@ export const useTCPClientPage = () => {
         queryType: query.queryType,
         queryId: query.id,
         requestNumber: query.requestNumber,
-        token: token || undefined, // Adicionar o token aqui
+        token: token || undefined,
+        onUnauthorized: handleUnauthorized, // Callback para 401 Unauthorized
       },
       callbacks
     );
@@ -419,10 +424,9 @@ export const useTCPClientPage = () => {
       return;
     }
 
-    // Criar uma chave única para identificar a requisição
+    // Criar uma chave única para identificar a requisição evitando requisições repetidas
     const queryKey = `${queryType}:${currentSearchTerm}:${connectionConfig.host}:${connectionConfig.port}`;
 
-    // Verificar se já existe uma requisição em andamento com os mesmos parâmetros
     if (pendingQueriesRef.current.has(queryKey)) {
       console.log(`Requisição duplicada detectada e ignorada: ${queryKey}`);
       return;
@@ -442,7 +446,6 @@ export const useTCPClientPage = () => {
       statusMessage: "Iniciando...",
     };
 
-    // Adicionar à lista de requisições pendentes
     pendingQueriesRef.current.add(queryKey);
 
     setQueries((prev) => [newQuery, ...prev]);
@@ -464,22 +467,11 @@ export const useTCPClientPage = () => {
     connectionConfig,
     updateConnectionConfig,
     nameSearchTerm,
-    setNameSearchTerm,
     documentSearchTerm,
-    setDocumentSearchTerm,
     queryType,
     setQueryType,
     queries,
-    batchQueries,
     cnpjByNameCPFQueries,
-    batchMode,
-    setBatchMode,
-    batchSize,
-    setBatchSize,
-    batchTerms,
-    setBatchTerms,
-    batchTermsInput,
-    setBatchTermsInput,
     user,
     token,
 

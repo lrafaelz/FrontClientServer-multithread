@@ -43,7 +43,6 @@ function TCPClientPage() {
     queryType,
     setQueryType,
     queries,
-    batchQueries,
     cnpjByNameCPFQueries,
     user,
     token,
@@ -172,9 +171,7 @@ function TCPClientPage() {
               variant="outlined"
               onClick={clearResults}
               disabled={
-                queries.length === 0 &&
-                batchQueries.length === 0 &&
-                cnpjByNameCPFQueries.length === 0
+                queries.length === 0 && cnpjByNameCPFQueries.length === 0
               }
             >
               Limpar Resultados

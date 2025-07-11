@@ -22,6 +22,7 @@ export class TCPClient {
   private optionsFailureTimeout: number = 60000; // Timeout de 60s quando OPTIONS falha ou não existe
   private onProgressUpdate?: (update: ProgressUpdate) => void;
   private onBatchProgressUpdate?: (update: BatchProgressUpdate) => void;
+  private onUnauthorized?: () => void;
 
   constructor(
     host: string,
@@ -29,7 +30,8 @@ export class TCPClient {
     useHttps: boolean = true,
     requestNumber: number = 1,
     onProgressUpdate?: (update: ProgressUpdate) => void,
-    onBatchProgressUpdate?: (update: BatchProgressUpdate) => void
+    onBatchProgressUpdate?: (update: BatchProgressUpdate) => void,
+    onUnauthorized?: () => void
   ) {
     // Configuração simples da URL base
     const protocol = useHttps ? "https" : "http";
@@ -40,6 +42,8 @@ export class TCPClient {
     this.onProgressUpdate = onProgressUpdate;
     // Callback para atualizações de progresso em lote
     this.onBatchProgressUpdate = onBatchProgressUpdate;
+    // Callback para tratamento de 401 Unauthorized
+    this.onUnauthorized = onUnauthorized;
 
     console.log(
       `[${requestNumber}] Cliente TCP criado com timeout dinâmico baseado em preflight`
@@ -239,6 +243,15 @@ export class TCPClient {
 
         // Verifica resposta
         if (!response.ok) {
+          // Verificar se é erro 401 (Unauthorized)
+          if (response.status === 401) {
+            console.warn(`[${requestId}] Token expirado ou inválido (401)`);
+            if (this.onUnauthorized) {
+              this.onUnauthorized();
+            }
+            throw new Error("Token expirado. Redirecionando para login...");
+          }
+
           const errorText = await response
             .text()
             .catch(() => "Não foi possível ler o corpo da resposta");
@@ -474,6 +487,15 @@ export class TCPClient {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
+          // Verificar se é erro 401 (Unauthorized)
+          if (response.status === 401) {
+            console.warn(`[${requestId}] Token expirado ou inválido (401)`);
+            if (this.onUnauthorized) {
+              this.onUnauthorized();
+            }
+            throw new Error("Token expirado. Redirecionando para login...");
+          }
+
           throw new Error(
             `Erro na requisição: ${response.status} ${response.statusText}`
           );

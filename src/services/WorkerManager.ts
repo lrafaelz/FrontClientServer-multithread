@@ -83,7 +83,15 @@ export class WorkerManager {
     options: QueryOptions,
     wrappedCallbacks: any
   ): Promise<void> {
-    const { host, port, searchTerm, queryType, requestNumber, token } = options;
+    const {
+      host,
+      port,
+      searchTerm,
+      queryType,
+      requestNumber,
+      token,
+      onUnauthorized,
+    } = options;
     if (!wrappedCallbacks) return; // Sem callbacks registrados
 
     try {
@@ -93,7 +101,9 @@ export class WorkerManager {
         port,
         true,
         requestNumber,
-        wrappedCallbacks.onProgress // Passamos o callback de progresso diretamente
+        wrappedCallbacks.onProgress, // Passamos o callback de progresso diretamente
+        undefined, // batchProgressUpdate não usado aqui
+        onUnauthorized // Callback para 401 Unauthorized
       );
 
       let results: QueryResult[];

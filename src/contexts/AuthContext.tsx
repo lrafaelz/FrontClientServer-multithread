@@ -5,6 +5,7 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface User {
   id: string;
@@ -29,6 +30,7 @@ interface AuthContextType {
     port: string
   ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  handleUnauthorized: () => void;
   isLoading: boolean;
   updateConnectionConfig: (host: string, port: string) => void;
 }
@@ -48,6 +50,7 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [connectionConfig, setConnectionConfig] = useState<ConnectionConfig>({
@@ -198,6 +201,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Keep connection config when logging out
   };
 
+  const handleUnauthorized = () => {
+    alert("Token expirado ou inválido. Fazendo logout automático...");
+    logout();
+    navigate("/login");
+  };
+
   const value: AuthContextType = {
     user,
     token,
@@ -205,6 +214,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     connectionConfig,
     login,
     logout,
+    handleUnauthorized,
     isLoading,
     updateConnectionConfig,
   };
